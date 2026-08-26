@@ -12,6 +12,7 @@ const {
 const protect = require("../middleware/authMiddleware");
 const checkHouseholdMember = require("../middleware/householdMiddleware");
 const checkHouseholdOwner = require("../middleware/ownerMiddleware");
+const itemRoutes = require("./itemRoutes");
 
 const router = express.Router();
 
@@ -44,6 +45,16 @@ router.delete(
   "/:id/leave",
   protect,
   leaveHousehold
+);
+
+// Nested inventory item routes for this household.
+// checkHouseholdMember runs once here so every item route below is
+// already scoped to a verified member of this household.
+router.use(
+  "/:id/items",
+  protect,
+  checkHouseholdMember,
+  itemRoutes
 );
 
 module.exports = router;

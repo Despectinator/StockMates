@@ -10,7 +10,19 @@ const protect = (req, res, next) => {
       });
     }
 
-    const token = authHeader.split(" ")[1];
+    let token = authHeader.slice("Bearer ".length).trim();
+
+    if (token.startsWith("Bearer ")) {
+      token = token.slice("Bearer ".length).trim();
+    }
+
+    token = token.replace(/^['"]|['"]$/g, "");
+
+    if (!token) {
+      return res.status(401).json({
+        message: "Not authorized. No token provided",
+      });
+    }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
@@ -18,6 +30,8 @@ const protect = (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error("JWT verification error:", error.name, error.message);
+
     return res.status(401).json({
       message: "Not authorized. Invalid or expired token",
     });
