@@ -13,6 +13,7 @@ const protect = require("../middleware/authMiddleware");
 const checkHouseholdMember = require("../middleware/householdMiddleware");
 const checkHouseholdOwner = require("../middleware/ownerMiddleware");
 const itemRoutes = require("./itemRoutes");
+const activityRoutes = require("./activityRoutes");
 
 const router = express.Router();
 
@@ -55,6 +56,15 @@ router.use(
   protect,
   checkHouseholdMember,
   itemRoutes
+);
+
+// Nested activity-log routes for this household — read-only, scoped
+// to verified members the same way items are.
+router.use(
+  "/:id/activity",
+  protect,
+  checkHouseholdMember,
+  activityRoutes
 );
 
 module.exports = router;

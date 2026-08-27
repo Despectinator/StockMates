@@ -1,5 +1,6 @@
 const Item = require("../models/Item");
 const mongoose = require("mongoose");
+const logActivity = require("../utils/activityLogger");
 
 const createItem = async (req, res) => {
 	try {
@@ -20,6 +21,16 @@ const createItem = async (req, res) => {
 			lowStockThreshold: lowStockThreshold ?? 1,
 			addedBy: req.user.userId,
 			lastUpdatedBy: req.user.userId,
+		});
+
+		logActivity({
+			household: req.params.id,
+			item: item._id,
+			itemName: item.name,
+			user: req.user.userId,
+			action: "item_added",
+			message: `Added "${item.name}" — ${item.quantity} ${item.unit}`,
+			newQuantity: item.quantity,
 		});
 
 		res.status(201).json({
@@ -56,6 +67,12 @@ const getItems = async (req, res) => {
 
 const getItem = async (req, res) => {
 	try {
+		if (!mongoose.isValidObjectId(req.params.itemId)) {
+			return res.status(400).json({
+				message: "Invalid item ID",
+			});
+		}
+
 		const item = await Item.findOne({
 			_id: req.params.itemId,
 			household: req.params.id,
@@ -112,6 +129,15 @@ const updateItem = async (req, res) => {
 
 		await item.save();
 
+		logActivity({
+			household: req.params.id,
+			item: item._id,
+			itemName: item.name,
+			user: req.user.userId,
+			action: "item_updated",
+			message: `Updated details for "${item.name}"`,
+		});
+
 		res.status(200).json({
 			message: "Item updated successfully",
 			item,
@@ -130,6 +156,12 @@ const updateItem = async (req, res) => {
 // the one that needs to recompute low/out-of-stock status every time.
 const updateQuantity = async (req, res) => {
 	try {
+		if (!mongoose.isValidObjectId(req.params.itemId)) {
+			return res.status(400).json({
+				message: "Invalid item ID",
+			});
+		}
+
 		const { quantity } = req.body;
 
 		if (quantity === undefined || quantity === null || quantity < 0) {
@@ -149,10 +181,23 @@ const updateQuantity = async (req, res) => {
 			});
 		}
 
+		const previousQuantity = item.quantity;
+
 		item.quantity = quantity;
 		item.lastUpdatedBy = req.user.userId;
 
 		await item.save();
+
+		logActivity({
+			household: req.params.id,
+			item: item._id,
+			itemName: item.name,
+			user: req.user.userId,
+			action: "quantity_updated",
+			message: `Changed quantity of "${item.name}" from ${previousQuantity} to ${item.quantity}`,
+			previousQuantity,
+			newQuantity: item.quantity,
+		});
 
 		res.status(200).json({
 			message: "Item quantity updated successfully",
@@ -169,6 +214,12 @@ const updateQuantity = async (req, res) => {
 
 const deleteItem = async (req, res) => {
 	try {
+		if (!mongoose.isValidObjectId(req.params.itemId)) {
+			return res.status(400).json({
+				message: "Invalid item ID",
+			});
+		}
+
 		const item = await Item.findOneAndDelete({
 			_id: req.params.itemId,
 			household: req.params.id,
@@ -179,6 +230,16 @@ const deleteItem = async (req, res) => {
 				message: "Item not found",
 			});
 		}
+
+		logActivity({
+			household: req.params.id,
+			item: item._id,
+			itemName: item.name,
+			user: req.user.userId,
+			action: "item_removed",
+			message: `Removed "${item.name}" from inventory`,
+			previousQuantity: item.quantity,
+		});
 
 		res.status(200).json({
 			message: "Item removed successfully",
