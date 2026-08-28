@@ -7,6 +7,9 @@ const {
   getHouseholdMembers,
   removeMember,
   leaveHousehold,
+  getMyHousehold,
+  getMyHouseholds,
+  deleteHousehold,
 } = require("../controllers/householdController");
 
 const protect = require("../middleware/authMiddleware");
@@ -18,6 +21,17 @@ const activityRoutes = require("./activityRoutes");
 const router = express.Router();
 
 router.post("/", protect, createHousehold);
+
+router.get("/my-household", protect, getMyHousehold);
+
+router.get("/my-households", protect, getMyHouseholds);
+
+router.delete(
+  "/:id",
+  protect,
+  checkHouseholdOwner,
+  deleteHousehold
+);
 
 router.post("/:id/join", protect, joinHousehold);
 

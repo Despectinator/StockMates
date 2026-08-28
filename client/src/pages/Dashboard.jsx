@@ -1,0 +1,152 @@
+import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import api from '../api/axios'
+import { useAuth } from '../context/AuthContext'
+import { useHousehold } from '../context/HouseholdContext'
+import ItemCard from '../components/ItemCard'
+import AddItemBar from '../components/AddItemBar'
+import MembersPanel from '../components/MembersPanel'
+import ActivityPanel from '../components/ActivityPanel'
+
+const TABS = [
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'activity', label: 'Activity' },
+  { key: 'members', label: 'Members' },
+]
+
+export default function Dashboard() {
+  const { user } = useAuth()
+  const { household, refreshHousehold, leaveHousehold, clearHousehold } = useHousehold()
+  const navigate = useNavigate()
+
+  const [tab, setTab] = useState('inventory')
+
+  // null = not fetched yet, so loading state is derived rather than
+  // tracked as a separate boolean set synchronously inside an effect.
+  const [items, setItems] = useState(null)
+  const [activity, setActivity] = useState(null)
+  const itemsLoading = items === null
+  const activityLoading = activity === null
+
+  const householdId = household?._id
+
+  const loadItems = useCallback(async () => {
+    const { data } = await api.get(`/households/${householdId}/items`)
+    setItems(data.items)
+  }, [householdId])
+
+  const loadActivity = useCallback(async () => {
+    const { data } = await api.get(`/households/${householdId}/activity?limit=50`)
+    setActivity(data.activity)
+  }, [householdId])
+
+  useEffect(() => {
+    // See the note in HouseholdContext.jsx — loadItems only sets state
+    // after its await resolves, this is a standard fetch-on-mount effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (householdId) loadItems()
+  }, [householdId, loadItems])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (householdId && tab === 'activity') loadActivity()
+  }, [householdId, tab, loadActivity])
+
+  const handleAddItem = async (payload) => {
+    const { data } = await api.post(`/households/${household._id}/items`, payload)
+    setItems((prev) => [data.item, ...(prev || [])])
+  }
+
+  const handleChangeQuantity = async (itemId, quantity) => {
+    const { data } = await api.patch(`/households/${household._id}/items/${itemId}/quantity`, { quantity })
+    setItems((prev) => prev.map((it) => (it._id === itemId ? data.item : it)))
+  }
+
+  const handleSaveItem = async (itemId, payload) => {
+    const { data } = await api.patch(`/households/${household._id}/items/${itemId}`, payload)
+    setItems((prev) => prev.map((it) => (it._id === itemId ? data.item : it)))
+  }
+
+  const handleDeleteItem = async (itemId) => {
+    await api.delete(`/households/${household._id}/items/${itemId}`)
+    setItems((prev) => prev.filter((it) => it._id !== itemId))
+  }
+
+  const handleRemoveMember = async (memberId) => {
+    await api.delete(`/households/${household._id}/members/${memberId}`)
+    await refreshHousehold()
+  }
+
+  const handleLeave = async () => {
+    await leaveHousehold()
+    navigate('/household-setup')
+  }
+
+  if (!household) return null
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <div className="eyebrow">Household</div>
+          <h1>{household.name}</h1>
+        </div>
+        <button type="button" className="btn btn-outline btn-sm" onClick={clearHousehold}>
+          Switch household
+        </button>
+      </div>
+
+      <div className="tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            className={`tab ${tab === t.key ? 'active' : ''}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'inventory' && (
+        <>
+          <AddItemBar onAdd={handleAddItem} />
+          {itemsLoading ? (
+            <div className="loading-state">Loading inventory…</div>
+          ) : items.length === 0 ? (
+            <div className="panel">
+              <div className="empty-state">
+                <h3>The shelf is empty</h3>
+                <p>Add your first item above to start tracking your household's stock.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="item-grid">
+              {items.map((item) => (
+                <ItemCard
+                  key={item._id}
+                  item={item}
+                  onChangeQuantity={handleChangeQuantity}
+                  onSave={handleSaveItem}
+                  onDelete={handleDeleteItem}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === 'activity' && <ActivityPanel activity={activity} loading={activityLoading} />}
+
+      {tab === 'members' && (
+        <MembersPanel
+          household={household}
+          currentUserId={user?.id}
+          onRemoveMember={handleRemoveMember}
+          onLeave={handleLeave}
+        />
+      )}
+    </div>
+  )
+}

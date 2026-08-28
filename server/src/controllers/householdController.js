@@ -208,6 +208,76 @@ const leaveHousehold = async (req, res) => {
 	}
 };
 
+const getMyHousehold = async (req, res) => {
+	try {
+		const userId = req.user.userId;
+
+		const household = await Household.findOne({
+			"members.user": userId,
+		})
+			.sort({ createdAt: 1 })
+			.populate("owner", "name email")
+			.populate("members.user", "name email");
+
+		if (!household) {
+			return res.status(404).json({
+				message: "You do not belong to a household",
+			});
+		}
+
+		res.status(200).json({
+			message: "Household retrieved successfully",
+			household,
+		});
+	} catch (error) {
+		console.error("Get my household error:", error);
+
+		res.status(500).json({
+			message: "Server error while retrieving your household",
+		});
+	}
+};
+
+const getMyHouseholds = async (req, res) => {
+	try {
+		const households = await Household.find({
+			"members.user": req.user.userId,
+		})
+			.sort({ createdAt: 1 })
+			.populate("owner", "name email")
+			.populate("members.user", "name email");
+
+		res.status(200).json({
+			message: "Households retrieved successfully",
+			households,
+		});
+	} catch (error) {
+		console.error("Get my households error:", error);
+
+		res.status(500).json({
+			message: "Server error while retrieving your households",
+		});
+	}
+};
+
+const deleteHousehold = async (req, res) => {
+	try {
+		const household = req.household;
+
+		await Household.deleteOne({ _id: household._id });
+
+		res.status(200).json({
+			message: "Household deleted successfully",
+		});
+	} catch (error) {
+		console.error("Delete household error:", error);
+
+		res.status(500).json({
+			message: "Server error while deleting household",
+		});
+	}
+};
+
 module.exports = {
 	createHousehold,
 	joinHousehold,
@@ -215,4 +285,7 @@ module.exports = {
 	getHouseholdMembers,
 	removeMember,
 	leaveHousehold,
+	getMyHousehold,
+	getMyHouseholds,
+	deleteHousehold,
 };
