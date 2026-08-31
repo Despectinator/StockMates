@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
+import socket from '../api/socket'
 import { useAuth } from '../context/AuthContext'
 import { useHousehold } from '../context/HouseholdContext'
 import ItemCard from '../components/ItemCard'
@@ -13,6 +14,20 @@ const TABS = [
   { key: 'activity', label: 'Activity' },
   { key: 'members', label: 'Members' },
 ]
+
+const upsertItem = (list, item) => {
+  if (!list) return [item]
+
+  const existingIndex = list.findIndex((it) => it._id === item._id)
+
+  if (existingIndex === -1) {
+    return [item, ...list]
+  }
+
+  const next = [...list]
+  next[existingIndex] = item
+  return next
+}
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -52,24 +67,38 @@ export default function Dashboard() {
     if (householdId && tab === 'activity') loadActivity()
   }, [householdId, tab, loadActivity])
 
+  useEffect(() => {
+    if (!householdId) return
+
+    const handleItemAdded = ({ item }) => {
+      setItems((prev) => upsertItem(prev, item))
+    }
+
+    socket.on('inventory:item_added', handleItemAdded)
+
+    return () => {
+      socket.off('inventory:item_added', handleItemAdded)
+    }
+  }, [householdId])
+
   const handleAddItem = async (payload) => {
     const { data } = await api.post(`/households/${household._id}/items`, payload)
-    setItems((prev) => [data.item, ...(prev || [])])
+    setItems((prev) => upsertItem(prev, data.item))
   }
 
   const handleChangeQuantity = async (itemId, quantity) => {
     const { data } = await api.patch(`/households/${household._id}/items/${itemId}/quantity`, { quantity })
-    setItems((prev) => prev.map((it) => (it._id === itemId ? data.item : it)))
+    setItems((prev) => (prev || []).map((it) => (it._id === itemId ? data.item : it)))
   }
 
   const handleSaveItem = async (itemId, payload) => {
     const { data } = await api.patch(`/households/${household._id}/items/${itemId}`, payload)
-    setItems((prev) => prev.map((it) => (it._id === itemId ? data.item : it)))
+    setItems((prev) => (prev || []).map((it) => (it._id === itemId ? data.item : it)))
   }
 
   const handleDeleteItem = async (itemId) => {
     await api.delete(`/households/${household._id}/items/${itemId}`)
-    setItems((prev) => prev.filter((it) => it._id !== itemId))
+    setItems((prev) => (prev || []).filter((it) => it._id !== itemId))
   }
 
   const handleRemoveMember = async (memberId) => {

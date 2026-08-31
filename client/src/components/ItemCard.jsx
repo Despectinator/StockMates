@@ -69,6 +69,7 @@ export default function ItemCard({ item, onChangeQuantity, onSave, onDelete }) {
       await onDelete(item._id)
     } catch (err) {
       setError(err.response?.data?.message || 'Could not remove item.')
+    } finally {
       setDeleting(false)
     }
   }

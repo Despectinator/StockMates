@@ -33,6 +33,12 @@ const createItem = async (req, res) => {
 			newQuantity: item.quantity,
 		});
 
+		const io = req.app.get("io");
+
+		io.to(`household:${req.params.id}`).emit("inventory:item_added", {
+			item,
+		});
+
 		res.status(201).json({
 			message: "Item added successfully",
 			item,
