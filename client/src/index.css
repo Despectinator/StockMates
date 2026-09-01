@@ -374,6 +374,27 @@ a {
   font-size: 13px;
 }
 
+.avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.presence-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.presence-dot.online {
+  background: var(--brand);
+}
+
 .page {
   flex: 1;
   width: 100%;

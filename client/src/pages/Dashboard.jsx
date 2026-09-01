@@ -40,6 +40,7 @@ export default function Dashboard() {
   // tracked as a separate boolean set synchronously inside an effect.
   const [items, setItems] = useState(null)
   const [activity, setActivity] = useState(null)
+  const [onlineUserIds, setOnlineUserIds] = useState(() => new Set())
   const itemsLoading = items === null
   const activityLoading = activity === null
 
@@ -70,14 +71,72 @@ export default function Dashboard() {
   useEffect(() => {
     if (!householdId) return
 
+    const joinHousehold = () => {
+      socket.emit('household:join', { householdId })
+    }
+
     const handleItemAdded = ({ item }) => {
       setItems((prev) => upsertItem(prev, item))
     }
 
+    const handleItemUpdated = ({ item }) => {
+      setItems((prev) => upsertItem(prev, item))
+    }
+
+    const handleQuantityUpdated = ({ item }) => {
+      setItems((prev) => upsertItem(prev, item))
+    }
+
+    const handleItemRemoved = ({ itemId }) => {
+      setItems((prev) => (prev || []).filter((item) => item._id !== itemId))
+    }
+
+    const handleActivityNew = ({ activity: entry }) => {
+      setActivity((prev) => {
+        if (prev === null || prev.some((activity) => activity._id === entry._id)) return prev
+        return [entry, ...prev]
+      })
+    }
+
+    const handlePresenceList = ({ onlineUserIds: ids }) => {
+      setOnlineUserIds(new Set(ids))
+    }
+
+    const handlePresenceOnline = ({ userId }) => {
+      setOnlineUserIds((previous) => new Set(previous).add(userId))
+    }
+
+    const handlePresenceOffline = ({ userId }) => {
+      setOnlineUserIds((previous) => {
+        const next = new Set(previous)
+        next.delete(userId)
+        return next
+      })
+    }
+
+    if (socket.connected) joinHousehold()
+
+    socket.on('connect', joinHousehold)
     socket.on('inventory:item_added', handleItemAdded)
+    socket.on('inventory:item_updated', handleItemUpdated)
+    socket.on('inventory:quantity_updated', handleQuantityUpdated)
+    socket.on('inventory:item_removed', handleItemRemoved)
+    socket.on('activity:new', handleActivityNew)
+    socket.on('presence:list', handlePresenceList)
+    socket.on('presence:online', handlePresenceOnline)
+    socket.on('presence:offline', handlePresenceOffline)
 
     return () => {
+      socket.emit('household:leave', { householdId })
+      socket.off('connect', joinHousehold)
       socket.off('inventory:item_added', handleItemAdded)
+      socket.off('inventory:item_updated', handleItemUpdated)
+      socket.off('inventory:quantity_updated', handleQuantityUpdated)
+      socket.off('inventory:item_removed', handleItemRemoved)
+      socket.off('activity:new', handleActivityNew)
+      socket.off('presence:list', handlePresenceList)
+      socket.off('presence:online', handlePresenceOnline)
+      socket.off('presence:offline', handlePresenceOffline)
     }
   }, [householdId])
 
@@ -172,6 +231,7 @@ export default function Dashboard() {
         <MembersPanel
           household={household}
           currentUserId={user?.id}
+          onlineUserIds={onlineUserIds}
           onRemoveMember={handleRemoveMember}
           onLeave={handleLeave}
         />

@@ -12,6 +12,7 @@ const logActivity = async ({
 	message,
 	previousQuantity,
 	newQuantity,
+	io,
 }) => {
 	try {
 		const activity = await Activity.create({
@@ -26,6 +27,15 @@ const logActivity = async ({
 		});
 
 		console.log("Activity logged successfully:", activity._id);
+
+		if (io) {
+			await activity.populate("user", "name email");
+
+			io.to(`household:${household}`).emit("activity:new", {
+				activity,
+			});
+		}
+
 		return activity;
 	} catch (error) {
 		console.error("Activity log error:", error);

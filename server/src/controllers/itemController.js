@@ -23,6 +23,8 @@ const createItem = async (req, res) => {
 			lastUpdatedBy: req.user.userId,
 		});
 
+		const io = req.app.get("io");
+
 		logActivity({
 			household: req.params.id,
 			item: item._id,
@@ -31,9 +33,8 @@ const createItem = async (req, res) => {
 			action: "item_added",
 			message: `Added "${item.name}" — ${item.quantity} ${item.unit}`,
 			newQuantity: item.quantity,
+			io,
 		});
-
-		const io = req.app.get("io");
 
 		io.to(`household:${req.params.id}`).emit("inventory:item_added", {
 			item,
@@ -135,6 +136,8 @@ const updateItem = async (req, res) => {
 
 		await item.save();
 
+		const io = req.app.get("io");
+
 		logActivity({
 			household: req.params.id,
 			item: item._id,
@@ -142,6 +145,11 @@ const updateItem = async (req, res) => {
 			user: req.user.userId,
 			action: "item_updated",
 			message: `Updated details for "${item.name}"`,
+			io,
+		});
+
+		io.to(`household:${req.params.id}`).emit("inventory:item_updated", {
+			item,
 		});
 
 		res.status(200).json({
@@ -194,6 +202,8 @@ const updateQuantity = async (req, res) => {
 
 		await item.save();
 
+		const io = req.app.get("io");
+
 		logActivity({
 			household: req.params.id,
 			item: item._id,
@@ -201,6 +211,13 @@ const updateQuantity = async (req, res) => {
 			user: req.user.userId,
 			action: "quantity_updated",
 			message: `Changed quantity of "${item.name}" from ${previousQuantity} to ${item.quantity}`,
+			previousQuantity,
+			newQuantity: item.quantity,
+			io,
+		});
+
+		io.to(`household:${req.params.id}`).emit("inventory:quantity_updated", {
+			item,
 			previousQuantity,
 			newQuantity: item.quantity,
 		});
@@ -237,6 +254,8 @@ const deleteItem = async (req, res) => {
 			});
 		}
 
+		const io = req.app.get("io");
+
 		logActivity({
 			household: req.params.id,
 			item: item._id,
@@ -245,6 +264,11 @@ const deleteItem = async (req, res) => {
 			action: "item_removed",
 			message: `Removed "${item.name}" from inventory`,
 			previousQuantity: item.quantity,
+			io,
+		});
+
+		io.to(`household:${req.params.id}`).emit("inventory:item_removed", {
+			itemId: item._id,
 		});
 
 		res.status(200).json({

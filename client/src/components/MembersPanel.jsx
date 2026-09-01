@@ -9,7 +9,7 @@ function initials(name = '') {
     .join('')
 }
 
-export default function MembersPanel({ household, currentUserId, onRemoveMember, onLeave }) {
+export default function MembersPanel({ household, currentUserId, onlineUserIds, onRemoveMember, onLeave }) {
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
 
@@ -53,7 +53,13 @@ export default function MembersPanel({ household, currentUserId, onRemoveMember,
         {household.members.map((member) => (
           <div className="list-row" key={member.user._id}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div className="avatar">{initials(member.user.name)}</div>
+              <div className="avatar-wrap">
+                <div className="avatar">{initials(member.user.name)}</div>
+                <span
+                  className={`presence-dot ${onlineUserIds.has(member.user._id) ? 'online' : ''}`}
+                  title={onlineUserIds.has(member.user._id) ? 'Online' : 'Offline'}
+                />
+              </div>
               <div>
                 <div className="member-name">{member.user.name}</div>
                 <div className="member-email">{member.user.email}</div>

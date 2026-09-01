@@ -1,34 +1,105 @@
 const Household = require("../models/Household");
+const mongoose = require("mongoose");
+
+// A user may open the app in more than one tab, so presence is reference
+// counted and "offline" is broadcast only after their last socket disconnects.
+const onlineUsersByHousehold = new Map();
+
+const addOnlineUser = (householdId, userId) => {
+  if (!onlineUsersByHousehold.has(householdId)) {
+    onlineUsersByHousehold.set(householdId, new Map());
+  }
+
+  const users = onlineUsersByHousehold.get(householdId);
+  const count = users.get(userId) || 0;
+  users.set(userId, count + 1);
+  return count === 0;
+};
+
+const removeOnlineUser = (householdId, userId) => {
+  const users = onlineUsersByHousehold.get(householdId);
+  if (!users) return false;
+
+  const count = users.get(userId) || 0;
+
+  if (count <= 1) {
+    users.delete(userId);
+    if (users.size === 0) onlineUsersByHousehold.delete(householdId);
+    return true;
+  }
+
+  users.set(userId, count - 1);
+  return false;
+};
 
 const setupHouseholdSocket = (io) => {
-  io.on("connection", async (socket) => {
-    try {
-      const userId = socket.user.userId;
+  io.on("connection", (socket) => {
+    const leaveActiveHousehold = () => {
+      const householdId = socket.data.householdId;
+      if (!householdId) return;
 
-      const household = await Household.findOne({
-        "members.user": userId,
-      });
+      const householdRoom = `household:${householdId}`;
+      socket.leave(householdRoom);
+      delete socket.data.householdId;
 
-      if (!household) {
-        console.log(`No household found for user: ${userId}`);
-        return;
+      if (removeOnlineUser(householdId, socket.data.userId)) {
+        io.to(householdRoom).emit("presence:offline", {
+          userId: socket.data.userId,
+        });
       }
+    };
 
-      const householdRoom = `household:${household._id}`;
+    socket.data.userId = String(socket.user.userId);
 
-      if (socket.rooms.has(householdRoom)) {
-        console.log(`User ${userId} already in socket room: ${householdRoom}`);
-        return;
+    socket.on("household:join", async ({ householdId } = {}) => {
+      try {
+        if (!mongoose.isValidObjectId(householdId)) return;
+
+        const household = await Household.exists({
+          _id: householdId,
+          "members.user": socket.user.userId,
+        });
+
+        if (!household) return;
+
+        if (socket.data.householdId === householdId) {
+          socket.emit("presence:list", {
+            onlineUserIds: Array.from(
+              (onlineUsersByHousehold.get(householdId) || new Map()).keys()
+            ),
+          });
+          return;
+        }
+
+        leaveActiveHousehold();
+
+        const householdRoom = `household:${householdId}`;
+        socket.join(householdRoom);
+        socket.data.householdId = householdId;
+
+        const isFirstConnection = addOnlineUser(householdId, socket.data.userId);
+
+        socket.emit("presence:list", {
+          onlineUserIds: Array.from(
+            (onlineUsersByHousehold.get(householdId) || new Map()).keys()
+          ),
+        });
+
+        if (isFirstConnection) {
+          socket.to(householdRoom).emit("presence:online", {
+            userId: socket.data.userId,
+          });
+        }
+      } catch (error) {
+        console.error("Socket household join error:", error);
       }
+    });
 
-      socket.join(householdRoom);
+    socket.on("household:leave", ({ householdId } = {}) => {
+      if (socket.data.householdId === householdId) leaveActiveHousehold();
+    });
 
-      console.log(
-        `User ${userId} joined socket room: ${householdRoom}`
-      );
-    } catch (error) {
-      console.error("Socket household setup error:", error);
-    }
+    socket.on("disconnect", leaveActiveHousehold);
   });
 };
 

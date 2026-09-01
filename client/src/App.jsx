@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 
-import socket from './api/socket'
+import socket, { connectSocket, disconnectSocket } from './api/socket'
+import { useAuth } from './context/AuthContext'
 
 import RequireAuth from './components/RequireAuth'
 import RequireHousehold from './components/RequireHousehold'
@@ -13,6 +14,7 @@ import HouseholdSetup from './pages/HouseholdSetup'
 import Dashboard from './pages/Dashboard'
 
 function App() {
+  const { token } = useAuth()
 
   useEffect(() => {
     const handleConnect = () => {
@@ -31,6 +33,14 @@ function App() {
       socket.off('disconnect', handleDisconnect)
     }
   }, [])
+
+  useEffect(() => {
+    if (token) {
+      connectSocket(token)
+    } else {
+      disconnectSocket()
+    }
+  }, [token])
 
   return (
     <Routes>
