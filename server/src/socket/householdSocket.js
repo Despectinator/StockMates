@@ -32,6 +32,31 @@ const removeOnlineUser = (householdId, userId) => {
   return false;
 };
 
+const removeUserFromHousehold = (io, householdId, userId) => {
+  const householdRoom = `household:${householdId}`;
+  const userIdString = String(userId);
+
+  for (const socket of io.sockets.sockets.values()) {
+    if (
+      String(socket.data.userId) === userIdString &&
+      socket.data.householdId === String(householdId)
+    ) {
+      socket.leave(householdRoom);
+      delete socket.data.householdId;
+
+      if (removeOnlineUser(String(householdId), userIdString)) {
+        io.to(householdRoom).emit("presence:offline", {
+          userId: userIdString,
+        });
+      }
+
+      socket.emit("household:removed", {
+        householdId: String(householdId),
+      });
+    }
+  }
+};
+
 const setupHouseholdSocket = (io) => {
   io.on("connection", (socket) => {
     const leaveActiveHousehold = () => {
@@ -103,4 +128,7 @@ const setupHouseholdSocket = (io) => {
   });
 };
 
-module.exports = setupHouseholdSocket;
+module.exports = {
+  setupHouseholdSocket,
+  removeUserFromHousehold,
+};

@@ -1,4 +1,7 @@
 const Household = require("../models/Household");
+const User = require("../models/User");
+const logActivity = require("../utils/activityLogger");
+const { removeUserFromHousehold } = require("../socket/householdSocket");
 
 const createHousehold = async (req, res) => {
 	try {
@@ -42,7 +45,6 @@ const createHousehold = async (req, res) => {
 const joinHousehold = async (req, res) => {
 	try {
 		const { id } = req.params;
-
 		const userId = req.user.userId;
 
 		// Find household
@@ -65,6 +67,15 @@ const joinHousehold = async (req, res) => {
 			});
 		}
 
+		// Get joining user's information
+		const user = await User.findById(userId).select("name email");
+
+		if (!user) {
+			return res.status(404).json({
+				message: "User not found",
+			});
+		}
+
 		// Add user as a member
 		household.members.push({
 			user: userId,
@@ -72,6 +83,18 @@ const joinHousehold = async (req, res) => {
 		});
 
 		await household.save();
+
+		// Get Socket.IO instance
+		const io = req.app.get("io");
+
+		// Log household activity and broadcast it in real time
+		await logActivity({
+			household: id,
+			user: userId,
+			action: "member_joined",
+			message: `${user.name} joined the household`,
+			io,
+		});
 
 		res.status(200).json({
 			message: "Joined household successfully",
@@ -144,11 +167,40 @@ const removeMember = async (req, res) => {
 			});
 		}
 
+		// Get the member's information before removing them
+		const userToRemove = await User.findById(userIdToRemove).select(
+			"name email"
+		);
+
+		if (!userToRemove) {
+			return res.status(404).json({
+				message: "User not found",
+			});
+		}
+
+		// Remove member from database
 		household.members = household.members.filter(
 			(member) => member.user.toString() !== userIdToRemove
 		);
 
 		await household.save();
+
+		const io = req.app.get("io");
+
+		// Force any active sockets belonging to the removed user
+		// out of this household and update presence.
+		if (io) {
+			removeUserFromHousehold(io, household._id, userIdToRemove);
+		}
+
+		// Record the removal in the activity feed.
+		await logActivity({
+			household: household._id,
+			user: req.user.userId,
+			action: "member_removed",
+			message: `${userToRemove.name} was removed from the household`,
+			io,
+		});
 
 		res.status(200).json({
 			message: "Member removed successfully",
@@ -190,11 +242,33 @@ const leaveHousehold = async (req, res) => {
 			});
 		}
 
+		// Get leaving user's information
+		const user = await User.findById(userId).select("name email");
+
+		if (!user) {
+			return res.status(404).json({
+				message: "User not found",
+			});
+		}
+
+		// Remove user from household
 		household.members = household.members.filter(
 			(member) => member.user.toString() !== userId
 		);
 
 		await household.save();
+
+		// Get Socket.IO instance
+		const io = req.app.get("io");
+
+		// Log and broadcast leave activity
+		await logActivity({
+			household: household._id,
+			user: userId,
+			action: "member_left",
+			message: `${user.name} left the household`,
+			io,
+		});
 
 		res.status(200).json({
 			message: "You have left the household successfully",

@@ -17,7 +17,6 @@ const activitySchema = new mongoose.Schema(
 		// entry still reads correctly even after the item itself is deleted.
 		itemName: {
 			type: String,
-			required: true,
 			trim: true,
 		},
 
@@ -29,7 +28,15 @@ const activitySchema = new mongoose.Schema(
 
 		action: {
 			type: String,
-			enum: ["item_added", "item_updated", "quantity_updated", "item_removed"],
+			enum: [
+				"item_added",
+				"item_updated",
+				"quantity_updated",
+				"item_removed",
+				"member_joined",
+				"member_left",
+				"member_removed",
+			],
 			required: true,
 		},
 
