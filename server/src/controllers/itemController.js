@@ -1,6 +1,10 @@
 const Item = require("../models/Item");
 const mongoose = require("mongoose");
 const logActivity = require("../utils/activityLogger");
+const {
+	syncShoppingListForItem,
+	removeShoppingListEntryForItem,
+} = require("../utils/shoppingListSync");
 
 const createItem = async (req, res) => {
 	try {
@@ -24,6 +28,7 @@ const createItem = async (req, res) => {
 		});
 
 		const io = req.app.get("io");
+		await syncShoppingListForItem(item, io);
 
 		logActivity({
 			household: req.params.id,
@@ -137,6 +142,7 @@ const updateItem = async (req, res) => {
 		await item.save();
 
 		const io = req.app.get("io");
+		await syncShoppingListForItem(item, io);
 
 		logActivity({
 			household: req.params.id,
@@ -203,6 +209,7 @@ const updateQuantity = async (req, res) => {
 		await item.save();
 
 		const io = req.app.get("io");
+		await syncShoppingListForItem(item, io);
 
 		logActivity({
 			household: req.params.id,
@@ -255,6 +262,7 @@ const deleteItem = async (req, res) => {
 		}
 
 		const io = req.app.get("io");
+		await removeShoppingListEntryForItem(item._id, item.household, io);
 
 		logActivity({
 			household: req.params.id,

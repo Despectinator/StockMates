@@ -708,6 +708,21 @@ a {
   display: block;
 }
 
+.badge-manual {
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+}
+
+.add-shopping-grid {
+  grid-template-columns: 2fr 1.2fr 0.9fr 0.9fr auto;
+}
+
+@media (max-width: 860px) {
+  .add-shopping-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 /* ---------------------------------------------------------------------- */
 /* members + activity lists                                                */
 /* ---------------------------------------------------------------------- */

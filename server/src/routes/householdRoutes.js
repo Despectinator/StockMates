@@ -16,7 +16,9 @@ const protect = require("../middleware/authMiddleware");
 const checkHouseholdMember = require("../middleware/householdMiddleware");
 const checkHouseholdOwner = require("../middleware/ownerMiddleware");
 const itemRoutes = require("./itemRoutes");
+const shoppingListRoutes = require("./shoppingListRoutes");
 const activityRoutes = require("./activityRoutes");
+const analyticsRoutes = require("./analyticsRoutes");
 
 const router = express.Router();
 
@@ -72,6 +74,14 @@ router.use(
   itemRoutes
 );
 
+// Nested shopping-list routes for this household, scoped to members.
+router.use(
+  "/:id/shopping-list",
+  protect,
+  checkHouseholdMember,
+  shoppingListRoutes
+);
+
 // Nested activity-log routes for this household — read-only, scoped
 // to verified members the same way items are.
 router.use(
@@ -79,6 +89,15 @@ router.use(
   protect,
   checkHouseholdMember,
   activityRoutes
+);
+
+// Nested analytics routes for this household — read-only, scoped to
+// verified members the same way items and activity are.
+router.use(
+  "/:id/analytics",
+  protect,
+  checkHouseholdMember,
+  analyticsRoutes
 );
 
 module.exports = router;
