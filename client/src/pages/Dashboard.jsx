@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import socket from '../api/socket'
@@ -8,12 +8,18 @@ import ItemCard from '../components/ItemCard'
 import AddItemBar from '../components/AddItemBar'
 import MembersPanel from '../components/MembersPanel'
 import ActivityPanel from '../components/ActivityPanel'
+import ShoppingListPanel from '../components/ShoppingListPanel'
+import AnalyticsPanel from '../components/AnalyticsPanel'
 
 const TABS = [
   { key: 'inventory', label: 'Inventory' },
+  { key: 'shopping', label: 'Shopping List' },
+  { key: 'analytics', label: 'Analytics' },
   { key: 'activity', label: 'Activity' },
   { key: 'members', label: 'Members' },
 ]
+
+const removeById = (list, id) => (list || []).filter((entry) => entry._id !== id)
 
 const upsertItem = (list, item) => {
   if (!list) return [item]
@@ -40,9 +46,17 @@ export default function Dashboard() {
   // tracked as a separate boolean set synchronously inside an effect.
   const [items, setItems] = useState(null)
   const [activity, setActivity] = useState(null)
+  const [shoppingList, setShoppingList] = useState(null)
+  const [shoppingListError, setShoppingListError] = useState('')
+  const [predictions, setPredictions] = useState(null)
+  const [analyticsError, setAnalyticsError] = useState('')
+  const [analyticsRefreshing, setAnalyticsRefreshing] = useState(false)
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set())
+  const householdRequestVersion = useRef(0)
   const itemsLoading = items === null
   const activityLoading = activity === null
+  const shoppingListLoading = shoppingList === null
+  const analyticsLoading = predictions === null && !analyticsError
 
   const householdId = household?._id
 
@@ -56,6 +70,45 @@ export default function Dashboard() {
     setActivity(data.activity)
   }, [householdId])
 
+  const loadShoppingList = useCallback(async () => {
+    const requestVersion = householdRequestVersion.current
+    setShoppingListError('')
+    try {
+      const { data } = await api.get(`/households/${householdId}/shopping-list`)
+      if (requestVersion !== householdRequestVersion.current) return
+      setShoppingList(data.shoppingList)
+    } catch (err) {
+      if (requestVersion !== householdRequestVersion.current) return
+      setShoppingListError(err.response?.data?.message || 'Could not load the shopping list.')
+    }
+  }, [householdId])
+
+  const loadPredictions = useCallback(async () => {
+    const requestVersion = householdRequestVersion.current
+    setAnalyticsRefreshing(true)
+    setAnalyticsError('')
+    try {
+      const { data } = await api.get(`/households/${householdId}/analytics/predictions`)
+      if (requestVersion !== householdRequestVersion.current) return
+      setPredictions(data.predictions)
+    } catch (err) {
+      if (requestVersion !== householdRequestVersion.current) return
+      setAnalyticsError(err.response?.data?.message || 'Could not reach the analytics service.')
+    } finally {
+      if (requestVersion === householdRequestVersion.current) setAnalyticsRefreshing(false)
+    }
+  }, [householdId])
+
+  useEffect(() => {
+    householdRequestVersion.current += 1
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShoppingList(null)
+    setShoppingListError('')
+    setPredictions(null)
+    setAnalyticsError('')
+    setAnalyticsRefreshing(false)
+  }, [householdId])
+
   useEffect(() => {
     // See the note in HouseholdContext.jsx — loadItems only sets state
     // after its await resolves, this is a standard fetch-on-mount effect.
@@ -67,6 +120,16 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (householdId && tab === 'activity') loadActivity()
   }, [householdId, tab, loadActivity])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (householdId && tab === 'shopping') loadShoppingList()
+  }, [householdId, tab, loadShoppingList])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (householdId && tab === 'analytics' && predictions === null) loadPredictions()
+  }, [householdId, tab, predictions, loadPredictions])
 
   useEffect(() => {
     if (!householdId) return
@@ -98,6 +161,22 @@ export default function Dashboard() {
       })
     }
 
+    const handleShoppingItemAdded = ({ item }) => {
+      setShoppingList((prev) => upsertItem(prev, item))
+    }
+
+    const handleShoppingItemClaimed = ({ item }) => {
+      setShoppingList((prev) => upsertItem(prev, item))
+    }
+
+    const handleShoppingItemUnclaimed = ({ item }) => {
+      setShoppingList((prev) => upsertItem(prev, item))
+    }
+
+    const handleShoppingItemRemoved = ({ itemId }) => {
+      setShoppingList((prev) => removeById(prev, itemId))
+    }
+
     const handlePresenceList = ({ onlineUserIds: ids }) => {
       setOnlineUserIds(new Set(ids))
     }
@@ -122,6 +201,10 @@ export default function Dashboard() {
     socket.on('inventory:quantity_updated', handleQuantityUpdated)
     socket.on('inventory:item_removed', handleItemRemoved)
     socket.on('activity:new', handleActivityNew)
+    socket.on('shopping:item_added', handleShoppingItemAdded)
+    socket.on('shopping:item_claimed', handleShoppingItemClaimed)
+    socket.on('shopping:item_unclaimed', handleShoppingItemUnclaimed)
+    socket.on('shopping:item_removed', handleShoppingItemRemoved)
     socket.on('presence:list', handlePresenceList)
     socket.on('presence:online', handlePresenceOnline)
     socket.on('presence:offline', handlePresenceOffline)
@@ -134,6 +217,10 @@ export default function Dashboard() {
       socket.off('inventory:quantity_updated', handleQuantityUpdated)
       socket.off('inventory:item_removed', handleItemRemoved)
       socket.off('activity:new', handleActivityNew)
+      socket.off('shopping:item_added', handleShoppingItemAdded)
+      socket.off('shopping:item_claimed', handleShoppingItemClaimed)
+      socket.off('shopping:item_unclaimed', handleShoppingItemUnclaimed)
+      socket.off('shopping:item_removed', handleShoppingItemRemoved)
       socket.off('presence:list', handlePresenceList)
       socket.off('presence:online', handlePresenceOnline)
       socket.off('presence:offline', handlePresenceOffline)
@@ -158,6 +245,31 @@ export default function Dashboard() {
   const handleDeleteItem = async (itemId) => {
     await api.delete(`/households/${household._id}/items/${itemId}`)
     setItems((prev) => (prev || []).filter((it) => it._id !== itemId))
+  }
+
+  const handleAddShoppingItem = async (payload) => {
+    const { data } = await api.post(`/households/${household._id}/shopping-list`, payload)
+    setShoppingList((prev) => upsertItem(prev, data.item))
+  }
+
+  const handleClaimShoppingItem = async (itemId) => {
+    const { data } = await api.patch(`/households/${household._id}/shopping-list/${itemId}/claim`)
+    setShoppingList((prev) => upsertItem(prev, data.item))
+  }
+
+  const handleUnclaimShoppingItem = async (itemId) => {
+    const { data } = await api.patch(`/households/${household._id}/shopping-list/${itemId}/unclaim`)
+    setShoppingList((prev) => upsertItem(prev, data.item))
+  }
+
+  const handlePurchaseShoppingItem = async (itemId, quantity) => {
+    await api.post(`/households/${household._id}/shopping-list/${itemId}/purchase`, quantity ? { quantity } : {})
+    setShoppingList((prev) => removeById(prev, itemId))
+  }
+
+  const handleDeleteShoppingItem = async (itemId) => {
+    await api.delete(`/households/${household._id}/shopping-list/${itemId}`)
+    setShoppingList((prev) => removeById(prev, itemId))
   }
 
   const handleRemoveMember = async (memberId) => {
@@ -223,6 +335,32 @@ export default function Dashboard() {
             </div>
           )}
         </>
+      )}
+
+      {tab === 'shopping' && (
+        <ShoppingListPanel
+          shoppingList={shoppingList || []}
+          loading={shoppingListLoading}
+          error={shoppingListError}
+          onRetry={loadShoppingList}
+          currentUserId={user?.id}
+          onAdd={handleAddShoppingItem}
+          onClaim={handleClaimShoppingItem}
+          onUnclaim={handleUnclaimShoppingItem}
+          onPurchase={handlePurchaseShoppingItem}
+          onDelete={handleDeleteShoppingItem}
+        />
+      )}
+
+      {tab === 'analytics' && (
+        <AnalyticsPanel
+          items={items || []}
+          predictions={predictions || []}
+          loading={analyticsLoading}
+          error={analyticsError}
+          onRefresh={loadPredictions}
+          refreshing={analyticsRefreshing}
+        />
       )}
 
       {tab === 'activity' && <ActivityPanel activity={activity} loading={activityLoading} />}
