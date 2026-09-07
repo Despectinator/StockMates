@@ -48,8 +48,19 @@ export function AuthProvider({ children }) {
     setUser(null)
   }
 
+  // Patches the locally-cached user (name/email) after a profile save,
+  // without requiring a re-login. Password changes don't touch this —
+  // they don't change what's stored about the user, just the credential.
+  const updateUser = (patch) => {
+    setUser((prev) => {
+      const next = { ...prev, ...patch }
+      localStorage.setItem(USER_KEY, JSON.stringify(next))
+      return next
+    })
+  }
+
   return (
-    <AuthContext.Provider value={{ token, user, login, register, logout }}>
+    <AuthContext.Provider value={{ token, user, login, register, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   )

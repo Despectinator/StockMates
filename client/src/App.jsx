@@ -12,6 +12,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import HouseholdSetup from './pages/HouseholdSetup'
 import Dashboard from './pages/Dashboard'
+import Profile from './pages/Profile'
 
 function App() {
   const { token } = useAuth()
@@ -54,6 +55,8 @@ function App() {
         />
 
         <Route element={<AppShell />}>
+          <Route path="/profile" element={<Profile />} />
+
           <Route element={<RequireHousehold />}>
             <Route path="/" element={<Dashboard />} />
           </Route>

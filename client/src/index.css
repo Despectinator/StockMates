@@ -734,6 +734,23 @@ a {
   box-shadow: var(--shadow-card);
 }
 
+.panel-form {
+  max-width: 440px;
+  padding: 24px 26px;
+  margin-bottom: 20px;
+}
+
+.panel-form h3 {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+.panel-form .panel-form-sub {
+  font-size: 13.5px;
+  color: var(--ink-muted);
+  margin-bottom: 18px;
+}
+
 .list-row {
   display: flex;
   align-items: center;
