@@ -10,11 +10,13 @@ import MembersPanel from '../components/MembersPanel'
 import ActivityPanel from '../components/ActivityPanel'
 import ShoppingListPanel from '../components/ShoppingListPanel'
 import AnalyticsPanel from '../components/AnalyticsPanel'
+import HouseholdStatsPanel from '../components/HouseholdStatsPanel'
 
 const TABS = [
   { key: 'inventory', label: 'Inventory' },
   { key: 'shopping', label: 'Shopping List' },
   { key: 'analytics', label: 'Analytics' },
+  { key: 'stats', label: 'Household Stats' },
   { key: 'activity', label: 'Activity' },
   { key: 'members', label: 'Members' },
 ]
@@ -51,12 +53,16 @@ export default function Dashboard() {
   const [predictions, setPredictions] = useState(null)
   const [analyticsError, setAnalyticsError] = useState('')
   const [analyticsRefreshing, setAnalyticsRefreshing] = useState(false)
+  const [stats, setStats] = useState(null)
+  const [statsError, setStatsError] = useState('')
+  const [statsRefreshing, setStatsRefreshing] = useState(false)
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set())
   const householdRequestVersion = useRef(0)
   const itemsLoading = items === null
   const activityLoading = activity === null
   const shoppingListLoading = shoppingList === null
   const analyticsLoading = predictions === null && !analyticsError
+  const statsLoading = stats === null && !statsError
 
   const householdId = household?._id
 
@@ -99,6 +105,22 @@ export default function Dashboard() {
     }
   }, [householdId])
 
+  const loadStats = useCallback(async () => {
+    const requestVersion = householdRequestVersion.current
+    setStatsRefreshing(true)
+    setStatsError('')
+    try {
+      const { data } = await api.get(`/households/${householdId}/analytics/stats`)
+      if (requestVersion !== householdRequestVersion.current) return
+      setStats(data.stats)
+    } catch (err) {
+      if (requestVersion !== householdRequestVersion.current) return
+      setStatsError(err.response?.data?.message || 'Could not load household stats.')
+    } finally {
+      if (requestVersion === householdRequestVersion.current) setStatsRefreshing(false)
+    }
+  }, [householdId])
+
   useEffect(() => {
     householdRequestVersion.current += 1
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -107,6 +129,9 @@ export default function Dashboard() {
     setPredictions(null)
     setAnalyticsError('')
     setAnalyticsRefreshing(false)
+    setStats(null)
+    setStatsError('')
+    setStatsRefreshing(false)
   }, [householdId])
 
   useEffect(() => {
@@ -130,6 +155,11 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (householdId && tab === 'analytics' && predictions === null) loadPredictions()
   }, [householdId, tab, predictions, loadPredictions])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (householdId && tab === 'stats' && stats === null) loadStats()
+  }, [householdId, tab, stats, loadStats])
 
   useEffect(() => {
     if (!householdId) return
@@ -360,6 +390,16 @@ export default function Dashboard() {
           error={analyticsError}
           onRefresh={loadPredictions}
           refreshing={analyticsRefreshing}
+        />
+      )}
+
+      {tab === 'stats' && (
+        <HouseholdStatsPanel
+          stats={stats}
+          loading={statsLoading}
+          error={statsError}
+          onRefresh={loadStats}
+          refreshing={statsRefreshing}
         />
       )}
 
