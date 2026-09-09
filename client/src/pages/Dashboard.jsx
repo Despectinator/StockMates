@@ -11,6 +11,7 @@ import ActivityPanel from '../components/ActivityPanel'
 import ShoppingListPanel from '../components/ShoppingListPanel'
 import AnalyticsPanel from '../components/AnalyticsPanel'
 import HouseholdStatsPanel from '../components/HouseholdStatsPanel'
+import SmartRestockCard from '../components/SmartRestockCard'
 
 const TABS = [
   { key: 'inventory', label: 'Inventory' },
@@ -338,6 +339,15 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
+
+      <SmartRestockCard
+        itemName="Milk"
+        currentQuantity={2}
+        unit="L"
+        dailyConsumption={1.1}
+        daysUntilEmpty={1.8}
+        recommendedQuantity={5}
+      />
 
       {tab === 'inventory' && (
         <>
