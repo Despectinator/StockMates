@@ -110,6 +110,18 @@ export default function AnalyticsPanel({ items, predictions, loading, error, onR
                       {CONFIDENCE_LABEL[prediction.confidence]}
                     </span>
                   )}
+                  {prediction.unusualConsumption && (
+                    <span
+                      className="badge badge-out"
+                      title={
+                        prediction.recentDailyRate
+                          ? `Latest drop is ~${prediction.recentDailyRate}/day — well above this item's usual ~${prediction.dailyConsumptionRate}/day`
+                          : 'Recent usage is well above the usual trend'
+                      }
+                    >
+                      Unusual usage
+                    </span>
+                  )}
                   <span className={`badge ${urgency.className}`}>{urgency.label}</span>
                 </div>
               </div>

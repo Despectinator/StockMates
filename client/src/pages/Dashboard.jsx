@@ -11,6 +11,7 @@ import ActivityPanel from '../components/ActivityPanel'
 import ShoppingListPanel from '../components/ShoppingListPanel'
 import AnalyticsPanel from '../components/AnalyticsPanel'
 import HouseholdStatsPanel from '../components/HouseholdStatsPanel'
+import AlertsBanner from '../components/AlertsBanner'
 import SmartRestockCard from '../components/SmartRestockCard'
 
 const TABS = [
@@ -58,6 +59,7 @@ export default function Dashboard() {
   const [statsError, setStatsError] = useState('')
   const [statsRefreshing, setStatsRefreshing] = useState(false)
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set())
+  const [dismissedAlertIds, setDismissedAlertIds] = useState(() => new Set())
   const householdRequestVersion = useRef(0)
   const itemsLoading = items === null
   const activityLoading = activity === null
@@ -133,6 +135,7 @@ export default function Dashboard() {
     setStats(null)
     setStatsError('')
     setStatsRefreshing(false)
+    setDismissedAlertIds(new Set())
   }, [householdId])
 
   useEffect(() => {
@@ -148,14 +151,17 @@ export default function Dashboard() {
   }, [householdId, tab, loadActivity])
 
   useEffect(() => {
+    // Predictions load as soon as a household is open (not gated on the
+    // Analytics tab) so the "likely to run out" / unusual-usage banner can
+    // show up from any tab, not just after someone thinks to check.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (householdId && tab === 'shopping') loadShoppingList()
-  }, [householdId, tab, loadShoppingList])
+    if (householdId && predictions === null) loadPredictions()
+  }, [householdId, predictions, loadPredictions])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (householdId && tab === 'analytics' && predictions === null) loadPredictions()
-  }, [householdId, tab, predictions, loadPredictions])
+    if (householdId && tab === 'shopping') loadShoppingList()
+  }, [householdId, tab, loadShoppingList])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -308,6 +314,10 @@ export default function Dashboard() {
     await refreshHousehold()
   }
 
+  const handleDismissAlert = (alertId) => {
+    setDismissedAlertIds((prev) => new Set(prev).add(alertId))
+  }
+
   const handleLeave = async () => {
     await leaveHousehold()
     navigate('/household-setup')
@@ -327,6 +337,22 @@ export default function Dashboard() {
         </button>
       </div>
 
+      <AlertsBanner
+        items={items}
+        predictions={predictions}
+        dismissedIds={dismissedAlertIds}
+        onDismiss={handleDismissAlert}
+      />
+
+      <SmartRestockCard
+        itemName="Milk"
+        currentQuantity={2}
+        unit="L"
+        dailyConsumption={1.1}
+        daysUntilEmpty={1.8}
+        recommendedQuantity={5}
+      />
+
       <div className="tabs">
         {TABS.map((t) => (
           <button
@@ -339,15 +365,6 @@ export default function Dashboard() {
           </button>
         ))}
       </div>
-
-      <SmartRestockCard
-        itemName="Milk"
-        currentQuantity={2}
-        unit="L"
-        dailyConsumption={1.1}
-        daysUntilEmpty={1.8}
-        recommendedQuantity={5}
-      />
 
       {tab === 'inventory' && (
         <>

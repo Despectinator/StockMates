@@ -1099,3 +1099,53 @@ a {
     align-items: stretch;
   }
 }
+
+/* ---------------------------------------------------------------------- */
+/* alerts banner                                                           */
+/* ---------------------------------------------------------------------- */
+
+.alerts-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+}
+
+.alert-critical {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+.alert-warn {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+}
+
+.alert-text {
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.alert-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ink-faint);
+  padding: 2px 4px;
+}
+
+.alert-dismiss:hover {
+  color: var(--ink);
+}
