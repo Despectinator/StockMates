@@ -12,6 +12,7 @@ import ShoppingListPanel from '../components/ShoppingListPanel'
 import AnalyticsPanel from '../components/AnalyticsPanel'
 import HouseholdStatsPanel from '../components/HouseholdStatsPanel'
 import AlertsBanner from '../components/AlertsBanner'
+import LastUsedPanel from '../components/LastUsedPanel'
 import SmartRestockCard from '../components/SmartRestockCard'
 
 const TABS = [
@@ -58,14 +59,19 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [statsError, setStatsError] = useState('')
   const [statsRefreshing, setStatsRefreshing] = useState(false)
+  const [lastUsedLog, setLastUsedLog] = useState(null)
+  const [lastUsedError, setLastUsedError] = useState('')
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set())
+  const [editingByItemId, setEditingByItemId] = useState({})
   const [dismissedAlertIds, setDismissedAlertIds] = useState(() => new Set())
   const householdRequestVersion = useRef(0)
+  const loadLastUsedRef = useRef(() => {})
   const itemsLoading = items === null
   const activityLoading = activity === null
   const shoppingListLoading = shoppingList === null
   const analyticsLoading = predictions === null && !analyticsError
   const statsLoading = stats === null && !statsError
+  const lastUsedLoading = lastUsedLog === null && !lastUsedError
 
   const householdId = household?._id
 
@@ -124,6 +130,19 @@ export default function Dashboard() {
     }
   }, [householdId])
 
+  const loadLastUsed = useCallback(async () => {
+    const requestVersion = householdRequestVersion.current
+    setLastUsedError('')
+    try {
+      const { data } = await api.get(`/households/${householdId}/items/last-used-log`)
+      if (requestVersion !== householdRequestVersion.current) return
+      setLastUsedLog(data.log)
+    } catch (err) {
+      if (requestVersion !== householdRequestVersion.current) return
+      setLastUsedError(err.response?.data?.message || 'Could not load the last-used log.')
+    }
+  }, [householdId])
+
   useEffect(() => {
     householdRequestVersion.current += 1
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -135,7 +154,10 @@ export default function Dashboard() {
     setStats(null)
     setStatsError('')
     setStatsRefreshing(false)
+    setLastUsedLog(null)
+    setLastUsedError('')
     setDismissedAlertIds(new Set())
+    setEditingByItemId({})
   }, [householdId])
 
   useEffect(() => {
@@ -169,6 +191,15 @@ export default function Dashboard() {
   }, [householdId, tab, stats, loadStats])
 
   useEffect(() => {
+    loadLastUsedRef.current = loadLastUsed
+  }, [loadLastUsed])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (householdId && tab === 'shopping' && lastUsedLog === null) loadLastUsed()
+  }, [householdId, tab, lastUsedLog, loadLastUsed])
+
+  useEffect(() => {
     if (!householdId) return
 
     const joinHousehold = () => {
@@ -183,8 +214,18 @@ export default function Dashboard() {
       setItems((prev) => upsertItem(prev, item))
     }
 
-    const handleQuantityUpdated = ({ item }) => {
+    const handleQuantityUpdated = ({ item, previousQuantity, newQuantity }) => {
       setItems((prev) => upsertItem(prev, item))
+      // A consumption event (quantity went down) can change who "used
+      // the last of it" — refresh that log if it's already loaded so it
+      // doesn't go stale while the tab sits open.
+      if (
+        typeof previousQuantity === 'number' &&
+        typeof newQuantity === 'number' &&
+        newQuantity < previousQuantity
+      ) {
+        loadLastUsedRef.current()
+      }
     }
 
     const handleItemRemoved = ({ itemId }) => {
@@ -230,6 +271,25 @@ export default function Dashboard() {
       })
     }
 
+    const handleEditingList = ({ editors }) => {
+      const next = {}
+      for (const entry of editors) next[entry.itemId] = { userId: entry.userId, userName: entry.userName }
+      setEditingByItemId(next)
+    }
+
+    const handleEditingStarted = ({ itemId, userId, userName }) => {
+      setEditingByItemId((previous) => ({ ...previous, [itemId]: { userId, userName } }))
+    }
+
+    const handleEditingStopped = ({ itemId }) => {
+      setEditingByItemId((previous) => {
+        if (!(itemId in previous)) return previous
+        const next = { ...previous }
+        delete next[itemId]
+        return next
+      })
+    }
+
     if (socket.connected) joinHousehold()
 
     socket.on('connect', joinHousehold)
@@ -245,6 +305,9 @@ export default function Dashboard() {
     socket.on('presence:list', handlePresenceList)
     socket.on('presence:online', handlePresenceOnline)
     socket.on('presence:offline', handlePresenceOffline)
+    socket.on('item:editing_list', handleEditingList)
+    socket.on('item:editing_started', handleEditingStarted)
+    socket.on('item:editing_stopped', handleEditingStopped)
 
     return () => {
       socket.emit('household:leave', { householdId })
@@ -260,6 +323,9 @@ export default function Dashboard() {
       socket.off('shopping:item_removed', handleShoppingItemRemoved)
       socket.off('presence:list', handlePresenceList)
       socket.off('presence:online', handlePresenceOnline)
+      socket.off('item:editing_list', handleEditingList)
+      socket.off('item:editing_started', handleEditingStarted)
+      socket.off('item:editing_stopped', handleEditingStopped)
       socket.off('presence:offline', handlePresenceOffline)
     }
   }, [householdId])
@@ -387,6 +453,11 @@ export default function Dashboard() {
                   onChangeQuantity={handleChangeQuantity}
                   onSave={handleSaveItem}
                   onDelete={handleDeleteItem}
+                  editingUser={
+                    editingByItemId[item._id] && editingByItemId[item._id].userId !== user?.id
+                      ? editingByItemId[item._id]
+                      : null
+                  }
                 />
               ))}
             </div>
@@ -406,6 +477,15 @@ export default function Dashboard() {
           onUnclaim={handleUnclaimShoppingItem}
           onPurchase={handlePurchaseShoppingItem}
           onDelete={handleDeleteShoppingItem}
+        />
+      )}
+
+      {tab === 'shopping' && (
+        <LastUsedPanel
+          log={lastUsedLog || []}
+          loading={lastUsedLoading}
+          error={lastUsedError}
+          onRetry={loadLastUsed}
         />
       )}
 

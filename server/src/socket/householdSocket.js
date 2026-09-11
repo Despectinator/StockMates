@@ -1,9 +1,15 @@
 const Household = require("../models/Household");
+const User = require("../models/User");
 const mongoose = require("mongoose");
 
 // A user may open the app in more than one tab, so presence is reference
 // counted and "offline" is broadcast only after their last socket disconnects.
 const onlineUsersByHousehold = new Map();
+
+// "Someone is editing…" state: householdId -> Map(itemId -> { userId, userName }).
+// Only tracked in memory — if the server restarts, in-progress edit
+// indicators simply clear, which is the right failure mode here.
+const editorsByHousehold = new Map();
 
 const addOnlineUser = (householdId, userId) => {
   if (!onlineUsersByHousehold.has(householdId)) {
@@ -32,6 +38,32 @@ const removeOnlineUser = (householdId, userId) => {
   return false;
 };
 
+// Clears every item this socket was editing (on disconnect, tab close, or
+// leaving the household) and tells the rest of the household so the
+// "editing…" badge doesn't get stuck on forever.
+const stopAllEditing = (io, householdId, socket) => {
+  if (!householdId || !socket.data.editingItemIds) return;
+
+  const editors = editorsByHousehold.get(householdId);
+  const householdRoom = `household:${householdId}`;
+
+  for (const itemId of socket.data.editingItemIds) {
+    if (editors) {
+      const current = editors.get(itemId);
+      if (current && current.userId === socket.data.userId) {
+        editors.delete(itemId);
+      }
+    }
+    io.to(householdRoom).emit("item:editing_stopped", {
+      itemId,
+      userId: socket.data.userId,
+    });
+  }
+
+  if (editors && editors.size === 0) editorsByHousehold.delete(householdId);
+  socket.data.editingItemIds.clear();
+};
+
 const removeUserFromHousehold = (io, householdId, userId) => {
   const householdRoom = `household:${householdId}`;
   const userIdString = String(userId);
@@ -43,6 +75,8 @@ const removeUserFromHousehold = (io, householdId, userId) => {
     ) {
       socket.leave(householdRoom);
       delete socket.data.householdId;
+
+      stopAllEditing(io, String(householdId), socket);
 
       if (removeOnlineUser(String(householdId), userIdString)) {
         io.to(householdRoom).emit("presence:offline", {
@@ -59,11 +93,17 @@ const removeUserFromHousehold = (io, householdId, userId) => {
 
 const setupHouseholdSocket = (io) => {
   io.on("connection", (socket) => {
+    socket.data.userId = String(socket.user.userId);
+    socket.data.editingItemIds = new Set();
+
     const leaveActiveHousehold = () => {
       const householdId = socket.data.householdId;
       if (!householdId) return;
 
       const householdRoom = `household:${householdId}`;
+
+      stopAllEditing(io, householdId, socket);
+
       socket.leave(householdRoom);
       delete socket.data.householdId;
 
@@ -73,8 +113,6 @@ const setupHouseholdSocket = (io) => {
         });
       }
     };
-
-    socket.data.userId = String(socket.user.userId);
 
     socket.on("household:join", async ({ householdId } = {}) => {
       try {
@@ -93,6 +131,11 @@ const setupHouseholdSocket = (io) => {
               (onlineUsersByHousehold.get(householdId) || new Map()).keys()
             ),
           });
+          socket.emit("item:editing_list", {
+            editors: Array.from(
+              (editorsByHousehold.get(householdId) || new Map()).entries()
+            ).map(([itemId, editor]) => ({ itemId, ...editor })),
+          });
           return;
         }
 
@@ -110,6 +153,14 @@ const setupHouseholdSocket = (io) => {
           ),
         });
 
+        // Catch this socket up on anything already being edited so a
+        // page refresh or a late join still shows the right badges.
+        socket.emit("item:editing_list", {
+          editors: Array.from(
+            (editorsByHousehold.get(householdId) || new Map()).entries()
+          ).map(([itemId, editor]) => ({ itemId, ...editor })),
+        });
+
         if (isFirstConnection) {
           socket.to(householdRoom).emit("presence:online", {
             userId: socket.data.userId,
@@ -122,6 +173,57 @@ const setupHouseholdSocket = (io) => {
 
     socket.on("household:leave", ({ householdId } = {}) => {
       if (socket.data.householdId === householdId) leaveActiveHousehold();
+    });
+
+    // Someone opened an item's edit form. Broadcast to the rest of the
+    // household so their cards can show "<name> is editing…". The name is
+    // looked up server-side rather than trusted from the client payload.
+    socket.on("item:editing_start", async ({ itemId } = {}) => {
+      try {
+        const householdId = socket.data.householdId;
+        if (!householdId || !mongoose.isValidObjectId(itemId)) return;
+
+        const user = await User.findById(socket.data.userId).select("name");
+        if (!user) return;
+
+        if (!editorsByHousehold.has(householdId)) {
+          editorsByHousehold.set(householdId, new Map());
+        }
+        editorsByHousehold.get(householdId).set(itemId, {
+          userId: socket.data.userId,
+          userName: user.name,
+        });
+        socket.data.editingItemIds.add(itemId);
+
+        io.to(`household:${householdId}`).emit("item:editing_started", {
+          itemId,
+          userId: socket.data.userId,
+          userName: user.name,
+        });
+      } catch (error) {
+        console.error("Socket editing_start error:", error);
+      }
+    });
+
+    socket.on("item:editing_stop", ({ itemId } = {}) => {
+      const householdId = socket.data.householdId;
+      if (!householdId || !itemId) return;
+
+      const editors = editorsByHousehold.get(householdId);
+      if (editors) {
+        const current = editors.get(itemId);
+        if (current && current.userId === socket.data.userId) {
+          editors.delete(itemId);
+          if (editors.size === 0) editorsByHousehold.delete(householdId);
+        }
+      }
+
+      socket.data.editingItemIds.delete(itemId);
+
+      io.to(`household:${householdId}`).emit("item:editing_stopped", {
+        itemId,
+        userId: socket.data.userId,
+      });
     });
 
     socket.on("disconnect", leaveActiveHousehold);

@@ -990,6 +990,56 @@ a {
   height: 32px;
 }
 
+/* ---------------------------------------------------------------------- */
+/* alerts banner                                                           */
+/* ---------------------------------------------------------------------- */
+
+.alerts-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.alert-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+}
+
+.alert-critical {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+.alert-warn {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+}
+
+.alert-text {
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.alert-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ink-faint);
+  padding: 2px 4px;
+}
+
+.alert-dismiss:hover {
+  color: var(--ink);
+}
+
 .smart-restock-card {
   background: #ffffff;
   border-radius: 14px;
@@ -1100,52 +1150,29 @@ a {
   }
 }
 
-/* ---------------------------------------------------------------------- */
-/* alerts banner                                                           */
-/* ---------------------------------------------------------------------- */
-
-.alerts-banner {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.alert-row {
-  display: flex;
+.editing-indicator {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--brand-dark);
+  background: var(--brand-bg);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  width: fit-content;
 }
 
-.alert-critical {
-  background: var(--danger-bg);
-  border-color: var(--danger);
+.editing-indicator::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: editing-pulse 1.4s ease-in-out infinite;
 }
 
-.alert-warn {
-  background: var(--warn-bg);
-  border-color: var(--warn);
-}
-
-.alert-text {
-  flex: 1;
-  font-size: 13.5px;
-  color: var(--ink);
-}
-
-.alert-dismiss {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-  color: var(--ink-faint);
-  padding: 2px 4px;
-}
-
-.alert-dismiss:hover {
-  color: var(--ink);
+@keyframes editing-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }

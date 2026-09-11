@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import socket from '../api/socket'
 
 const STATUS_LABEL = {
   'in-stock': 'In stock',
@@ -17,7 +18,7 @@ function gaugePercent(quantity, threshold) {
   return Math.min(100, Math.round((quantity / ceiling) * 100))
 }
 
-export default function ItemCard({ item, onChangeQuantity, onSave, onDelete }) {
+export default function ItemCard({ item, onChangeQuantity, onSave, onDelete, editingUser }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
     name: item.name,
@@ -30,6 +31,17 @@ export default function ItemCard({ item, onChangeQuantity, onSave, onDelete }) {
   const [error, setError] = useState('')
 
   const statusKey = STATUS_CLASS[item.status] || 'instock'
+
+  // Let the rest of the household know this item's edit form is open, and
+  // clear that the moment it closes — whether by Save, Cancel, or just
+  // navigating away while it's still open.
+  useEffect(() => {
+    if (!editing) return
+    socket.emit('item:editing_start', { itemId: item._id })
+    return () => {
+      socket.emit('item:editing_stop', { itemId: item._id })
+    }
+  }, [editing, item._id])
 
   const handleQuantityStep = async (delta) => {
     const next = Math.max(0, item.quantity + delta)
@@ -79,6 +91,9 @@ export default function ItemCard({ item, onChangeQuantity, onSave, onDelete }) {
       <div className="item-card">
         <form className="item-edit-form" onSubmit={handleSave}>
           {error && <div className="alert alert-danger">{error}</div>}
+          {editingUser && (
+            <div className="editing-indicator">{editingUser.userName} is also editing this item</div>
+          )}
           <input
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -131,6 +146,8 @@ export default function ItemCard({ item, onChangeQuantity, onSave, onDelete }) {
         </div>
         <span className={`badge badge-${statusKey}`}>{STATUS_LABEL[item.status]}</span>
       </div>
+
+      {editingUser && <div className="editing-indicator">{editingUser.userName} is editing…</div>}
 
       <div className="gauge">
         <div

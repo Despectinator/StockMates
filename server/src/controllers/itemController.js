@@ -1,4 +1,6 @@
 const Item = require("../models/Item");
+const User = require("../models/User");
+const Activity = require("../models/Activity");
 const mongoose = require("mongoose");
 const logActivity = require("../utils/activityLogger");
 const {
@@ -291,6 +293,79 @@ const deleteItem = async (req, res) => {
 	}
 };
 
+// "Who Used the Last Of It?" — for every item, the most recent activity
+// entry where its quantity went DOWN (a consumption event, as opposed to
+// a restock). Answers "who's responsible for this item needing a
+// restock" at a glance, rather than making people dig through the full
+// activity feed.
+const getLastUsedLog = async (req, res) => {
+	try {
+		const householdId = req.params.id;
+
+		const rows = await Activity.aggregate([
+			{
+				$match: {
+					household: new mongoose.Types.ObjectId(householdId),
+					action: "quantity_updated",
+					item: { $ne: null },
+					$expr: { $lt: ["$newQuantity", "$previousQuantity"] },
+				},
+			},
+			{ $sort: { createdAt: -1 } },
+			{
+				$group: {
+					_id: "$item",
+					itemName: { $first: "$itemName" },
+					user: { $first: "$user" },
+					previousQuantity: { $first: "$previousQuantity" },
+					newQuantity: { $first: "$newQuantity" },
+					createdAt: { $first: "$createdAt" },
+				},
+			},
+			{ $sort: { createdAt: -1 } },
+		]);
+
+		const [items, users] = await Promise.all([
+			Item.find({ household: householdId }).select("name unit quantity"),
+			User.find({ _id: { $in: rows.map((row) => row.user).filter(Boolean) } }).select(
+				"name email"
+			),
+		]);
+
+		const itemMap = new Map(items.map((item) => [item._id.toString(), item]));
+		const userMap = new Map(users.map((u) => [u._id.toString(), u]));
+
+		const log = rows.map((row) => {
+			const itemId = row._id.toString();
+			const item = itemMap.get(itemId);
+			const user = row.user ? userMap.get(row.user.toString()) : null;
+
+			return {
+				itemId,
+				itemName: item?.name || row.itemName || "Unknown item",
+				unit: item?.unit || "",
+				currentQuantity: item ? item.quantity : null,
+				userId: row.user ? row.user.toString() : null,
+				userName: user?.name || "Unknown",
+				quantityUsed: row.previousQuantity - row.newQuantity,
+				ranOut: row.newQuantity === 0,
+				date: row.createdAt,
+			};
+		});
+
+		res.status(200).json({
+			message: "Last-used log retrieved successfully",
+			log,
+		});
+	} catch (error) {
+		console.error("Get last-used log error:", error);
+
+		res.status(500).json({
+			message: "Server error while retrieving the last-used log",
+		});
+	}
+};
+
 module.exports = {
 	createItem,
 	getItems,
@@ -298,4 +373,5 @@ module.exports = {
 	updateItem,
 	updateQuantity,
 	deleteItem,
+	getLastUsedLog,
 };

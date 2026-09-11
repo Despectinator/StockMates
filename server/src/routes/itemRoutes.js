@@ -7,6 +7,7 @@ const {
 	updateItem,
 	updateQuantity,
 	deleteItem,
+	getLastUsedLog,
 } = require("../controllers/itemController");
 
 // mergeParams so req.params.id (the household id from the parent router)
@@ -15,6 +16,7 @@ const router = express.Router({ mergeParams: true });
 
 router.post("/", createItem);
 router.get("/", getItems);
+router.get("/last-used-log", getLastUsedLog);
 router.get("/:itemId", getItem);
 router.patch("/:itemId", updateItem);
 router.patch("/:itemId/quantity", updateQuantity);
