@@ -1,13 +1,18 @@
-import React from 'react'
+import { useState } from 'react'
 
 const SmartRestockCard = ({
   itemName,
+  category,
   currentQuantity,
   unit = '',
   dailyConsumption,
   daysUntilEmpty,
   recommendedQuantity,
+  onAddToShoppingList,
 }) => {
+  const [status, setStatus] = useState('idle') // idle | submitting | added | error
+  const [error, setError] = useState('')
+
   const getPriority = () => {
     if (daysUntilEmpty <= 1) return 'HIGH'
     if (daysUntilEmpty <= 3) return 'MEDIUM'
@@ -32,6 +37,30 @@ const SmartRestockCard = ({
     }
 
     return `${itemName} has enough stock for now.`
+  }
+
+  const handleAdd = async () => {
+    setStatus('submitting')
+    setError('')
+    try {
+      await onAddToShoppingList({
+        name: itemName,
+        category,
+        unit,
+        requestedQuantity: recommendedQuantity,
+      })
+      setStatus('added')
+    } catch (err) {
+      // A 409 here just means it's already on the list — not really an
+      // error from the person's point of view, so treat it the same as
+      // a successful add rather than showing a scary red alert.
+      if (err.response?.status === 409) {
+        setStatus('added')
+        return
+      }
+      setStatus('error')
+      setError(err.response?.data?.message || 'Could not add this to the shopping list.')
+    }
   }
 
   return (
@@ -72,6 +101,8 @@ const SmartRestockCard = ({
         </div>
       </div>
 
+      {error && <div className="alert alert-danger" style={{ marginTop: 12 }}>{error}</div>}
+
       <div className="restock-recommendation">
         <div>
           <span>Recommended Purchase</span>
@@ -82,11 +113,12 @@ const SmartRestockCard = ({
 
         <button
           type="button"
-          onClick={() => {
-            console.log(`Add ${recommendedQuantity} ${unit} of ${itemName} to shopping list`)
-          }}
+          onClick={handleAdd}
+          disabled={status === 'submitting' || status === 'added'}
         >
-          Add to Shopping List
+          {status === 'submitting' && 'Adding…'}
+          {status === 'added' && '✓ On shopping list'}
+          {(status === 'idle' || status === 'error') && 'Add to Shopping List'}
         </button>
       </div>
     </div>

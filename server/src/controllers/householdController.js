@@ -1,5 +1,8 @@
 const Household = require("../models/Household");
 const User = require("../models/User");
+const Item = require("../models/Item");
+const ShoppingListItem = require("../models/ShoppingListItem");
+const Activity = require("../models/Activity");
 const logActivity = require("../utils/activityLogger");
 const { removeUserFromHousehold } = require("../socket/householdSocket");
 
@@ -337,6 +340,16 @@ const getMyHouseholds = async (req, res) => {
 const deleteHousehold = async (req, res) => {
 	try {
 		const household = req.household;
+
+		// Deleting a household would otherwise leave its items, shopping
+		// list, and activity history orphaned in the database forever —
+		// nothing else references a household id once it's gone, so
+		// clean up everything scoped to it in the same request.
+		await Promise.all([
+			Item.deleteMany({ household: household._id }),
+			ShoppingListItem.deleteMany({ household: household._id }),
+			Activity.deleteMany({ household: household._id }),
+		]);
 
 		await Household.deleteOne({ _id: household._id });
 

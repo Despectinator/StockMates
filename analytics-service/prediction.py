@@ -44,6 +44,8 @@ def predict_item(item):
         "predictedDaysUntilEmpty": None,
         "predictedEmptyDate": None,
         "suggestedRestockQuantity": max(1, ceil(threshold * 2)),
+        "unusualConsumption": False,
+        "recentDailyRate": None,
     }
 
     if len(history) < 2:
@@ -71,6 +73,24 @@ def predict_item(item):
     days_until_empty = current_quantity / daily_rate if daily_rate else None
     empty_date = datetime.now(timezone.utc).timestamp() + days_until_empty * 86400
     suggested_quantity = max(1, ceil(current_quantity + daily_rate * 7))
+
+    # Flag when the most recent single consumption step is running well
+    # above the item's overall trend — e.g. someone had guests over and
+    # burned through double the usual amount in one day. Needs at least
+    # 3 points so "recent" and "trend" aren't the same two points, and a
+    # minimum time gap so a pair of near-simultaneous log entries can't
+    # produce a wild, meaningless rate from dividing by almost zero.
+    recent_daily_rate = None
+    unusual_consumption = False
+    if len(history) >= 3:
+        recent_dt = x[-1] - x[-2]
+        if recent_dt > (1 / 1440):  # more than ~1 minute apart
+            step_rate = (y[-2] - y[-1]) / recent_dt
+            if step_rate > 0:
+                recent_daily_rate = round(step_rate, 3)
+                if step_rate >= daily_rate * 1.75 and (step_rate - daily_rate) >= 0.1:
+                    unusual_consumption = True
+
     return {
         **base,
         "trend": "declining",
@@ -79,4 +99,6 @@ def predict_item(item):
         "predictedEmptyDate": datetime.fromtimestamp(empty_date, timezone.utc).isoformat().replace("+00:00", "Z"),
         "confidence": _confidence(len(history), r_squared),
         "suggestedRestockQuantity": suggested_quantity,
+        "unusualConsumption": unusual_consumption,
+        "recentDailyRate": recent_daily_rate,
     }

@@ -20,8 +20,14 @@ const registerUser = async (req, res) => {
 			});
 		}
 
+		// Normalize the same way the schema does on save, so this check
+		// actually catches case-variant duplicates (e.g. "Test@x.com" vs
+		// "test@x.com") instead of hitting the DB's unique index and
+		// surfacing as a generic 500.
+		const normalizedEmail = email.trim().toLowerCase();
+
 		// Check whether user already exists
-		const existingUser = await User.findOne({ email });
+		const existingUser = await User.findOne({ email: normalizedEmail });
 
 		if (existingUser) {
 			return res.status(409).json({
@@ -35,7 +41,7 @@ const registerUser = async (req, res) => {
 		// Create user
 		const user = await User.create({
 			name,
-			email,
+			email: normalizedEmail,
 			password: hashedPassword,
 		});
 
@@ -69,8 +75,13 @@ const loginUser = async (req, res) => {
 			});
 		}
 
+		// Normalize the same way registration/the schema does, so logging
+		// in with a different letter-case than you registered with still
+		// finds the account instead of falsely reporting bad credentials.
+		const normalizedEmail = email.trim().toLowerCase();
+
 		// Find user
-		const user = await User.findOne({ email });
+		const user = await User.findOne({ email: normalizedEmail });
 
 		if (!user) {
 			return res.status(401).json({

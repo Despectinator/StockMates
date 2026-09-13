@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const ShoppingListItem = require("../models/ShoppingListItem");
 const Item = require("../models/Item");
 const logActivity = require("../utils/activityLogger");
+const { syncShoppingListForItem } = require("../utils/shoppingListSync");
 
 const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -42,6 +43,25 @@ const addShoppingListItem = async (req, res) => {
 			household: req.params.id,
 			name: new RegExp(`^${escapeRegExp(name.trim())}$`, "i"),
 		});
+
+		// Don't let the same item end up on the list twice — match by the
+		// linked inventory item when there is one (catches "Milk" vs.
+		// "milk " pointing at the same item), otherwise fall back to a
+		// case-insensitive name match for items with no inventory link yet.
+		const duplicateQuery = sourceItem
+			? { household: req.params.id, sourceItem: sourceItem._id }
+			: {
+					household: req.params.id,
+					name: new RegExp(`^${escapeRegExp(name.trim())}$`, "i"),
+			  };
+
+		const duplicateEntry = await ShoppingListItem.findOne(duplicateQuery);
+
+		if (duplicateEntry) {
+			return res.status(409).json({
+				message: `"${duplicateEntry.name}" is already on the shopping list`,
+			});
+		}
 
 		const entry = await ShoppingListItem.create({
 			household: req.params.id,
@@ -278,6 +298,14 @@ const purchaseItem = async (req, res) => {
 		}
 
 		await entry.deleteOne();
+
+		// The entry just purchased is gone, so if this was only a partial
+		// purchase and the item is still low/out-of-stock, this recreates
+		// its auto shopping-list entry rather than leaving it silently
+		// dropped off the list. Must run after the deleteOne() above —
+		// otherwise it would see the about-to-be-deleted entry as "already
+		// on the list" and skip regenerating it.
+		await syncShoppingListForItem(restockedItem, io);
 
 		logActivity({
 			household: req.params.id,

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import socket from '../api/socket'
@@ -25,6 +25,31 @@ const TABS = [
 ]
 
 const removeById = (list, id) => (list || []).filter((entry) => entry._id !== id)
+
+// Picks the single most urgent restock candidate: whichever item is
+// declining and predicted to run out soonest. Returns null when there's
+// nothing declining yet (e.g. a brand-new household with no usage
+// history), which the caller uses to hide the card entirely rather than
+// showing a placeholder.
+function pickTopRestockCandidate(items, predictions) {
+  if (!items || !predictions) return null
+
+  const predictionByItemId = new Map(predictions.map((p) => [p.itemId, p]))
+
+  let best = null
+  for (const item of items) {
+    const prediction = predictionByItemId.get(item._id)
+    if (!prediction) continue
+    if (prediction.trend !== 'declining') continue
+    if (prediction.predictedDaysUntilEmpty === null || prediction.predictedDaysUntilEmpty === undefined) continue
+
+    if (!best || prediction.predictedDaysUntilEmpty < best.prediction.predictedDaysUntilEmpty) {
+      best = { item, prediction }
+    }
+  }
+
+  return best
+}
 
 const upsertItem = (list, item) => {
   if (!list) return [item]
@@ -68,6 +93,10 @@ export default function Dashboard() {
   const loadLastUsedRef = useRef(() => {})
   const itemsLoading = items === null
   const activityLoading = activity === null
+  const topRestockCandidate = useMemo(
+    () => pickTopRestockCandidate(items, predictions),
+    [items, predictions]
+  )
   const shoppingListLoading = shoppingList === null
   const analyticsLoading = predictions === null && !analyticsError
   const statsLoading = stats === null && !statsError
@@ -410,14 +439,19 @@ export default function Dashboard() {
         onDismiss={handleDismissAlert}
       />
 
-      <SmartRestockCard
-        itemName="Milk"
-        currentQuantity={2}
-        unit="L"
-        dailyConsumption={1.1}
-        daysUntilEmpty={1.8}
-        recommendedQuantity={5}
-      />
+      {topRestockCandidate && (
+        <SmartRestockCard
+          key={topRestockCandidate.item._id}
+          itemName={topRestockCandidate.item.name}
+          category={topRestockCandidate.item.category}
+          currentQuantity={topRestockCandidate.item.quantity}
+          unit={topRestockCandidate.item.unit}
+          dailyConsumption={topRestockCandidate.prediction.dailyConsumptionRate}
+          daysUntilEmpty={topRestockCandidate.prediction.predictedDaysUntilEmpty}
+          recommendedQuantity={topRestockCandidate.prediction.suggestedRestockQuantity}
+          onAddToShoppingList={handleAddShoppingItem}
+        />
+      )}
 
       <div className="tabs">
         {TABS.map((t) => (
