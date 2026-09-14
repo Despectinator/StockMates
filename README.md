@@ -173,13 +173,13 @@ The project has been validated end-to-end in a local development setup:
 - React client loads on port 5173
 - Auth, household setup, item updates, and shopping recommendations work in the browser
 ## Screenshots
- 
-### Dashboard overview
- 
+
+### Dashboard Overview
+
 ![StockMates dashboard overview](./docs/screenshots/dashboard.png)
- 
-### Household statistics
- 
+
+### Household Statistics
+
 ![StockMates household statistics](./docs/screenshots/household.jpeg)
  
 ## Notes
