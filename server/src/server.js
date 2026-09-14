@@ -19,6 +19,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "replace_with_a_long_random_string") {
+  throw new Error("JWT_SECRET must be set and non-default for local or production use.");
+}
+
+if (!process.env.MONGO_URI || process.env.MONGO_URI.trim() === "") {
+  throw new Error("MONGO_URI must be set before the server starts.");
+}
+
 // Create HTTP server
 const server = http.createServer(app);
 

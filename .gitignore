@@ -26,3 +26,5 @@ analytics-service/__pycache__/
 *.njsproj
 *.sln
 *.sw?
+
+client/data/

@@ -11,23 +11,29 @@ export default function AlertsBanner({ items, predictions, dismissedIds, onDismi
   const itemById = new Map(items.map((item) => [item._id, item]))
 
   const critical = predictions
-    .filter(
-      (p) =>
-        p.trend === 'declining' &&
-        p.predictedDaysUntilEmpty !== null &&
-        p.predictedDaysUntilEmpty <= 2 &&
-        itemById.has(p.itemId) &&
-        !dismissedIds.has(`empty:${p.itemId}`)
-    )
+    .filter((p) => {
+      if (!itemById.has(p.itemId)) return false
+      if (dismissedIds.has(`empty:${p.itemId}`)) return false
+
+      const item = itemById.get(p.itemId)
+      const lowThreshold = Number(item?.lowStockThreshold ?? 0)
+      const currentQty = Number(item?.quantity ?? 0)
+
+      return lowThreshold > 0 && currentQty < lowThreshold
+    })
     .map((p) => ({ ...p, item: itemById.get(p.itemId) }))
 
   const unusual = predictions
-    .filter(
-      (p) =>
-        p.unusualConsumption &&
-        itemById.has(p.itemId) &&
-        !dismissedIds.has(`unusual:${p.itemId}`)
-    )
+    .filter((p) => {
+      if (!itemById.has(p.itemId)) return false
+      if (dismissedIds.has(`unusual:${p.itemId}`)) return false
+
+      const item = itemById.get(p.itemId)
+      const lowThreshold = Number(item?.lowStockThreshold ?? 0)
+      const currentQty = Number(item?.quantity ?? 0)
+
+      return p.unusualConsumption && lowThreshold > 0 && currentQty < lowThreshold
+    })
     .map((p) => ({ ...p, item: itemById.get(p.itemId) }))
 
   if (critical.length === 0 && unusual.length === 0) return null

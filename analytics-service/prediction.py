@@ -13,6 +13,32 @@ def _timestamp(value):
     return parsed.timestamp()
 
 
+def _daily_snapshots(history):
+    """Collapse raw history events down to one point per calendar day (UTC),
+    keeping whichever quantity was recorded last that day.
+
+    This is the actual fix for the "56,286 units/day" class of bug, not
+    just a threshold check on it. A "daily consumption rate" is only a
+    meaningful concept when fitted against genuine day-over-day
+    snapshots — fitting it against raw events means two clicks of a
+    quantity button a few seconds apart get treated as an entire day's
+    worth of independent observation, and a real quantity drop divided
+    by a few seconds and projected out to "per day" is always going to
+    be nonsense, no matter how far apart the rest of the history is
+    spread. Bucketing by day means it no longer matters how many times
+    an item was touched in one sitting — it can only ever contribute
+    one data point to the trend, exactly like a real day's usage would.
+    """
+    points = sorted(history, key=lambda point: _timestamp(point["date"]))
+    by_day = {}
+    for point in points:
+        day_key = datetime.fromtimestamp(
+            _timestamp(point["date"]), timezone.utc
+        ).date()
+        by_day[day_key] = point  # last write per day wins, since points are sorted ascending
+    return [by_day[day] for day in sorted(by_day)]
+
+
 def _recent_segment(history):
     points = sorted(history, key=lambda point: _timestamp(point["date"]))
     if not points:
@@ -35,7 +61,7 @@ def _confidence(point_count, r_squared):
 
 
 def predict_item(item):
-    history = _recent_segment(item.get("history", []))
+    history = _recent_segment(_daily_snapshots(item.get("history", [])))
     current_quantity = max(0.0, float(item["currentQuantity"]))
     threshold = max(0.0, float(item.get("lowStockThreshold", 0)))
     base = {
@@ -43,7 +69,7 @@ def predict_item(item):
         "dailyConsumptionRate": 0.0,
         "predictedDaysUntilEmpty": None,
         "predictedEmptyDate": None,
-        "suggestedRestockQuantity": max(1, ceil(threshold * 2)),
+        "suggestedRestockQuantity": 0,
         "unusualConsumption": False,
         "recentDailyRate": None,
     }
@@ -53,6 +79,14 @@ def predict_item(item):
 
     x = [_timestamp(point["date"]) / 86400 for point in history]
     y = [float(point["quantity"]) for point in history]
+
+    # Belt-and-braces: with day-bucketed data this should already be at
+    # least ~1 day, but keep a floor in case of clock skew or malformed
+    # timestamps rather than trusting the bucketing alone.
+    MIN_SPAN_DAYS = 1 / 24  # 1 hour
+    if (x[-1] - x[0]) < MIN_SPAN_DAYS:
+        return {**base, "trend": "insufficient_data", "confidence": None}
+
     x_mean = mean(x)
     y_mean = mean(y)
     denominator = sum((value - x_mean) ** 2 for value in x)
@@ -72,7 +106,23 @@ def predict_item(item):
     daily_rate = -slope
     days_until_empty = current_quantity / daily_rate if daily_rate else None
     empty_date = datetime.now(timezone.utc).timestamp() + days_until_empty * 86400
-    suggested_quantity = max(1, ceil(current_quantity + daily_rate * 7))
+
+    # For low-stock alerts, use a conservative shortfall model instead of a raw
+    # linear-regression projection. A single manual quantity reduction or a tiny
+    # time window can otherwise create an absurd "units/day" value and a massive
+    # restock recommendation.
+    if current_quantity > threshold:
+        return {
+            **base,
+            "trend": "stable",
+            "confidence": _confidence(len(history), r_squared),
+            "dailyConsumptionRate": round(min(daily_rate, max(1.0, threshold * 2)), 3),
+            "predictedDaysUntilEmpty": None,
+        }
+
+    capped_rate = max(0.1, min(daily_rate, max(1.0, threshold * 2, current_quantity)))
+    target_quantity = max(threshold * 2, threshold + 3.0)
+    suggested_quantity = max(1, ceil(target_quantity - current_quantity))
 
     # Flag when the most recent single consumption step is running well
     # above the item's overall trend — e.g. someone had guests over and
@@ -94,11 +144,11 @@ def predict_item(item):
     return {
         **base,
         "trend": "declining",
-        "dailyConsumptionRate": round(daily_rate, 3),
-        "predictedDaysUntilEmpty": round(days_until_empty, 3),
+        "dailyConsumptionRate": round(capped_rate, 3),
+        "predictedDaysUntilEmpty": round(min(current_quantity / max(capped_rate, 0.1), days_until_empty) if days_until_empty is not None else None, 3),
         "predictedEmptyDate": datetime.fromtimestamp(empty_date, timezone.utc).isoformat().replace("+00:00", "Z"),
         "confidence": _confidence(len(history), r_squared),
-        "suggestedRestockQuantity": suggested_quantity,
+        "suggestedRestockQuantity": max(1, suggested_quantity),
         "unusualConsumption": unusual_consumption,
         "recentDailyRate": recent_daily_rate,
     }

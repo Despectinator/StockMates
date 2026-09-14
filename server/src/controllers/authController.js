@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { getInputError } = require("../utils/inputError");
 
 const registerUser = async (req, res) => {
 	try {
@@ -20,10 +21,9 @@ const registerUser = async (req, res) => {
 			});
 		}
 
-		// Normalize the same way the schema does on save, so this check
-		// actually catches case-variant duplicates (e.g. "Test@x.com" vs
-		// "test@x.com") instead of hitting the DB's unique index and
-		// surfacing as a generic 500.
+		// Normalize for storage and duplicate checks, but treat the email as
+		// a canonical lowercase identity. This preserves the user's chosen
+		// account identity while still rejecting case-variant duplicates.
 		const normalizedEmail = email.trim().toLowerCase();
 
 		// Check whether user already exists
@@ -56,8 +56,14 @@ const registerUser = async (req, res) => {
 			},
 		});
 	} catch (error) {
-		console.error("Registration error:", error);
+		const inputError = getInputError(error);
+		if (inputError) {
+			return res.status(inputError.status).json({
+				message: inputError.message,
+			});
+		}
 
+		console.error("Registration error:", error);
 		res.status(500).json({
 			message: "Server error during registration",
 		});
@@ -75,10 +81,10 @@ const loginUser = async (req, res) => {
 			});
 		}
 
-		// Normalize the same way registration/the schema does, so logging
-		// in with a different letter-case than you registered with still
-		// finds the account instead of falsely reporting bad credentials.
-		const normalizedEmail = email.trim().toLowerCase();
+		// Canonicalize the submitted email to the stored lowercase identity while
+		// still accepting the common case-insensitive usage on login.
+		const submittedEmail = email.trim();
+		const normalizedEmail = submittedEmail.toLowerCase();
 
 		// Find user
 		const user = await User.findOne({ email: normalizedEmail });
@@ -243,8 +249,14 @@ const updateProfile = async (req, res) => {
 			},
 		});
 	} catch (error) {
-		console.error("Update profile error:", error);
+		const inputError = getInputError(error);
+		if (inputError) {
+			return res.status(inputError.status).json({
+				message: inputError.message,
+			});
+		}
 
+		console.error("Update profile error:", error);
 		res.status(500).json({
 			message: "Server error while updating profile",
 		});

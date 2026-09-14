@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
@@ -34,3 +35,13 @@ def predict_batch(request: BatchRequest):
         for item in request.items
     ]
     return {"results": results}
+
+
+if __name__ == "__main__":
+    try:
+        uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=False)
+    except OSError as exc:
+        if "Address already in use" in str(exc):
+            print("Analytics service could not start because port 8001 is already in use.")
+            raise SystemExit(1)
+        raise

@@ -4,6 +4,7 @@ const Item = require("../models/Item");
 const ShoppingListItem = require("../models/ShoppingListItem");
 const Activity = require("../models/Activity");
 const logActivity = require("../utils/activityLogger");
+const { getInputError } = require("../utils/inputError");
 const { removeUserFromHousehold } = require("../socket/householdSocket");
 
 const createHousehold = async (req, res) => {
@@ -37,8 +38,14 @@ const createHousehold = async (req, res) => {
 			household,
 		});
 	} catch (error) {
-		console.error("Create household error:", error);
+		const inputError = getInputError(error);
+		if (inputError) {
+			return res.status(inputError.status).json({
+				message: inputError.message,
+			});
+		}
 
+		console.error("Create household error:", error);
 		res.status(500).json({
 			message: "Server error while creating household",
 		});

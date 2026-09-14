@@ -1,5 +1,7 @@
 const ShoppingListItem = require("../models/ShoppingListItem");
 
+const normalizeListName = (value) => String(value || "").trim().toLowerCase();
+
 // Keeps the shopping list in sync with an item's stock status: adds a
 // pending auto-entry when an item goes low/out-of-stock, and clears any
 // existing auto-entry once it's back to a healthy quantity - e.g. because
@@ -8,11 +10,18 @@ const ShoppingListItem = require("../models/ShoppingListItem");
 const syncShoppingListForItem = async (item, io) => {
 	try {
 		const householdId = item.household.toString();
+		const normalizedItemName = normalizeListName(item.name);
 
 		if (item.status === "low-stock" || item.status === "out-of-stock") {
 			const existing = await ShoppingListItem.findOne({
 				household: item.household,
-				sourceItem: item._id,
+				$or: [
+					{ sourceItem: item._id },
+					{
+						sourceItem: null,
+						name: { $regex: `^${item.name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$")}$`, $options: "i" },
+					},
+				],
 			});
 
 			if (existing) return; // already on the list, nothing to do
@@ -51,6 +60,22 @@ const syncShoppingListForItem = async (item, io) => {
 				io.to(`household:${householdId}`).emit("shopping:item_removed", {
 					itemId: removed._id,
 				});
+			}
+
+			const duplicateAutoEntry = await ShoppingListItem.findOne({
+				household: item.household,
+				source: "auto",
+				sourceItem: { $ne: item._id },
+				name: { $regex: `^${item.name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$")}$`, $options: "i" },
+			});
+
+			if (duplicateAutoEntry && normalizeListName(duplicateAutoEntry.name) === normalizedItemName) {
+				await ShoppingListItem.deleteOne({ _id: duplicateAutoEntry._id });
+				if (io) {
+					io.to(`household:${householdId}`).emit("shopping:item_removed", {
+						itemId: duplicateAutoEntry._id,
+					});
+				}
 			}
 		}
 	} catch (error) {

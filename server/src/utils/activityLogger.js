@@ -26,8 +26,6 @@ const logActivity = async ({
 			newQuantity,
 		});
 
-		console.log("Activity logged successfully:", activity._id);
-
 		if (io) {
 			await activity.populate("user", "name email");
 

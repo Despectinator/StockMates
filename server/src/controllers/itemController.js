@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Activity = require("../models/Activity");
 const mongoose = require("mongoose");
 const logActivity = require("../utils/activityLogger");
+const { getInputError } = require("../utils/inputError");
 const {
 	syncShoppingListForItem,
 	removeShoppingListEntryForItem,
@@ -52,8 +53,14 @@ const createItem = async (req, res) => {
 			item,
 		});
 	} catch (error) {
-		console.error("Create item error:", error);
+		const inputError = getInputError(error);
+		if (inputError) {
+			return res.status(inputError.status).json({
+				message: inputError.message,
+			});
+		}
 
+		console.error("Create item error:", error);
 		res.status(500).json({
 			message: "Server error while adding item",
 		});
@@ -165,8 +172,14 @@ const updateItem = async (req, res) => {
 			item,
 		});
 	} catch (error) {
-		console.error("Update item error:", error);
+		const inputError = getInputError(error);
+		if (inputError) {
+			return res.status(inputError.status).json({
+				message: inputError.message,
+			});
+		}
 
+		console.error("Update item error:", error);
 		res.status(500).json({
 			message: "Server error while updating item",
 		});
@@ -236,8 +249,14 @@ const updateQuantity = async (req, res) => {
 			item,
 		});
 	} catch (error) {
-		console.error("Update quantity error:", error);
+		const inputError = getInputError(error);
+		if (inputError) {
+			return res.status(inputError.status).json({
+				message: inputError.message,
+			});
+		}
 
+		console.error("Update quantity error:", error);
 		res.status(500).json({
 			message: "Server error while updating item quantity",
 		});

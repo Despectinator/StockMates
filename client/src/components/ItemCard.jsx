@@ -18,6 +18,23 @@ function gaugePercent(quantity, threshold) {
   return Math.min(100, Math.round((quantity / ceiling) * 100))
 }
 
+function getItemIcon(name = '', category = '') {
+  const combined = `${name} ${category}`.toLowerCase()
+
+  if (combined.includes('milk') || combined.includes('yogurt') || combined.includes('cheese')) return '🥛'
+  if (combined.includes('bread') || combined.includes('bakery')) return '🍞'
+  if (combined.includes('egg')) return '🥚'
+  if (combined.includes('fruit') || combined.includes('apple') || combined.includes('banana') || combined.includes('tomato')) return '🍎'
+  if (combined.includes('meat') || combined.includes('chicken') || combined.includes('salmon')) return '🥩'
+  if (combined.includes('fish') || combined.includes('seafood')) return '🐟'
+  if (combined.includes('rice') || combined.includes('pasta') || combined.includes('grain') || combined.includes('flour')) return '🌾'
+  if (combined.includes('coffee') || combined.includes('tea')) return '☕'
+  if (combined.includes('toilet') || combined.includes('soap') || combined.includes('clean') || combined.includes('household')) return '🧼'
+  if (combined.includes('water') || combined.includes('drink')) return '💧'
+  if (combined.includes('snack') || combined.includes('cookie') || combined.includes('chips')) return '🥨'
+  return '🛒'
+}
+
 export default function ItemCard({ item, onChangeQuantity, onSave, onDelete, editingUser }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
@@ -140,9 +157,12 @@ export default function ItemCard({ item, onChangeQuantity, onSave, onDelete, edi
   return (
     <div className="item-card">
       <div className="item-card-top">
-        <div>
-          <div className="item-name">{item.name}</div>
-          {item.category && <div className="item-category">{item.category}</div>}
+        <div className="item-title-wrap">
+          <span className="item-icon" aria-hidden="true">{getItemIcon(item.name, item.category)}</span>
+          <div>
+            <div className="item-name">{item.name}</div>
+            {item.category && <div className="item-category">{item.category}</div>}
+          </div>
         </div>
         <span className={`badge badge-${statusKey}`}>{STATUS_LABEL[item.status]}</span>
       </div>

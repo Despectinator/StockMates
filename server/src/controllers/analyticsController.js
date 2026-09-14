@@ -3,10 +3,46 @@ const Activity = require("../models/Activity");
 
 const ANALYTICS_SERVICE_URL =
 	process.env.ANALYTICS_SERVICE_URL || "http://127.0.0.1:8001";
+const MAX_REASONABLE_DELTA = 200;
 
 // Every activity action that records a quantity snapshot — the only
 // entries useful for fitting a consumption trend.
 const QUANTITY_ACTIONS = ["item_added", "quantity_updated", "item_purchased"];
+
+const normalizeDelta = (delta, previousQuantity = 0) => {
+	if (!Number.isFinite(delta) || delta === 0) return 0;
+
+	const absDelta = Math.abs(delta);
+
+	if (delta < 0) {
+		return absDelta > previousQuantity ? 0 : delta;
+	}
+
+	if (absDelta > MAX_REASONABLE_DELTA && absDelta > (previousQuantity || 0) * 2) {
+		return 0;
+	}
+
+	return delta;
+};
+
+const clampSeries = (series) => {
+	if (!Array.isArray(series) || series.length === 0) return series;
+
+	const values = series
+		.map((entry) => Number(entry.quantity) || 0)
+		.filter((value) => value > 0)
+		.sort((a, b) => a - b);
+
+	if (values.length === 0) return series;
+
+	const median = values[Math.floor(values.length / 2)] || 0;
+	const cap = Math.max(25, median * 8 || 25);
+
+	return series.map((entry) => ({
+		...entry,
+		quantity: Math.min(Number(entry.quantity) || 0, cap),
+	}));
+};
 
 const getPredictions = async (req, res) => {
 	try {
@@ -131,7 +167,10 @@ const getHouseholdStats = async (req, res) => {
 
 			if (!hasQuantities || !itemId) continue;
 
-			const delta = entry.newQuantity - entry.previousQuantity;
+			const delta = normalizeDelta(
+				entry.newQuantity - entry.previousQuantity,
+				Number(entry.previousQuantity) || 0
+			);
 			if (delta === 0) continue;
 
 			if (delta < 0) {
@@ -241,25 +280,32 @@ const getHouseholdStats = async (req, res) => {
 			totalReplenishments: replenishmentHistory.length,
 		};
 
+		const normalizedUsageOverTime = clampSeries(usageOverTime);
+		const normalizedContributions = [...contributionsByUser.values()]
+			.map((entry) => ({
+				...entry,
+				quantityRestocked: Math.min(entry.quantityRestocked || 0, 100),
+			}))
+			.sort(
+				(a, b) =>
+					(b.quantityRestocked + b.itemsAdded) -
+					(a.quantityRestocked + a.itemsAdded)
+			);
+
 		res.status(200).json({
 			message: "Household stats retrieved successfully",
 			stats: {
 				totals,
 				mostConsumed,
 				leastConsumed,
-				contributions: [...contributionsByUser.values()].sort(
-					(a, b) =>
-						b.quantityRestocked +
-						b.itemsAdded -
-						(a.quantityRestocked + a.itemsAdded)
-				),
+				contributions: normalizedContributions,
 				replenishmentHistory: replenishmentHistory.slice(-20).reverse(),
 				avgReplenishmentIntervalDays,
 				perItemAvgReplenishmentInterval:
 					perItemAvgReplenishmentInterval.sort(
 						(a, b) => a.avgDays - b.avgDays
 					),
-				usageOverTime,
+				usageOverTime: normalizedUsageOverTime,
 			},
 		});
 	} catch (error) {

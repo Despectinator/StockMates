@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const ShoppingListItem = require("../models/ShoppingListItem");
 const Item = require("../models/Item");
 const logActivity = require("../utils/activityLogger");
+const { getInputError } = require("../utils/inputError");
 const { syncShoppingListForItem } = require("../utils/shoppingListSync");
 
 const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -39,20 +40,21 @@ const addShoppingListItem = async (req, res) => {
 		}
 
 		// Link a matching inventory item so purchasing can restock it.
+		const trimmedName = name.trim();
 		const sourceItem = await Item.findOne({
 			household: req.params.id,
-			name: new RegExp(`^${escapeRegExp(name.trim())}$`, "i"),
+			name: new RegExp(`^${escapeRegExp(trimmedName)}$`, "i"),
 		});
 
 		// Don't let the same item end up on the list twice — match by the
 		// linked inventory item when there is one (catches "Milk" vs.
 		// "milk " pointing at the same item), otherwise fall back to a
-		// case-insensitive name match for items with no inventory link yet.
+		// case-insensitive exact name match for items with no inventory link yet.
 		const duplicateQuery = sourceItem
 			? { household: req.params.id, sourceItem: sourceItem._id }
 			: {
 					household: req.params.id,
-					name: new RegExp(`^${escapeRegExp(name.trim())}$`, "i"),
+					name: new RegExp(`^${escapeRegExp(trimmedName)}$`, "i"),
 			  };
 
 		const duplicateEntry = await ShoppingListItem.findOne(duplicateQuery);
@@ -65,7 +67,7 @@ const addShoppingListItem = async (req, res) => {
 
 		const entry = await ShoppingListItem.create({
 			household: req.params.id,
-			name: name.trim(),
+			name: trimmedName,
 			category: category || sourceItem?.category || "General",
 			unit: unit || sourceItem?.unit || "pcs",
 			requestedQuantity: requestedQuantity > 0 ? requestedQuantity : 1,
@@ -97,8 +99,14 @@ const addShoppingListItem = async (req, res) => {
 			item: entry,
 		});
 	} catch (error) {
-		console.error("Add shopping list item error:", error);
+		const inputError = getInputError(error);
+		if (inputError) {
+			return res.status(inputError.status).json({
+				message: inputError.message,
+			});
+		}
 
+		console.error("Add shopping list item error:", error);
 		res.status(500).json({
 			message: "Server error while adding to shopping list",
 		});
@@ -328,8 +336,14 @@ const purchaseItem = async (req, res) => {
 			item: restockedItem,
 		});
 	} catch (error) {
-		console.error("Purchase shopping list item error:", error);
+		const inputError = getInputError(error);
+		if (inputError) {
+			return res.status(inputError.status).json({
+				message: inputError.message,
+			});
+		}
 
+		console.error("Purchase shopping list item error:", error);
 		res.status(500).json({
 			message: "Server error while purchasing item",
 		});

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api/axios'
 import socket from '../api/socket'
 import { useAuth } from '../context/AuthContext'
@@ -12,44 +12,8 @@ import ShoppingListPanel from '../components/ShoppingListPanel'
 import AnalyticsPanel from '../components/AnalyticsPanel'
 import HouseholdStatsPanel from '../components/HouseholdStatsPanel'
 import AlertsBanner from '../components/AlertsBanner'
-import LastUsedPanel from '../components/LastUsedPanel'
-import SmartRestockCard from '../components/SmartRestockCard'
-
-const TABS = [
-  { key: 'inventory', label: 'Inventory' },
-  { key: 'shopping', label: 'Shopping List' },
-  { key: 'analytics', label: 'Analytics' },
-  { key: 'stats', label: 'Household Stats' },
-  { key: 'activity', label: 'Activity' },
-  { key: 'members', label: 'Members' },
-]
 
 const removeById = (list, id) => (list || []).filter((entry) => entry._id !== id)
-
-// Picks the single most urgent restock candidate: whichever item is
-// declining and predicted to run out soonest. Returns null when there's
-// nothing declining yet (e.g. a brand-new household with no usage
-// history), which the caller uses to hide the card entirely rather than
-// showing a placeholder.
-function pickTopRestockCandidate(items, predictions) {
-  if (!items || !predictions) return null
-
-  const predictionByItemId = new Map(predictions.map((p) => [p.itemId, p]))
-
-  let best = null
-  for (const item of items) {
-    const prediction = predictionByItemId.get(item._id)
-    if (!prediction) continue
-    if (prediction.trend !== 'declining') continue
-    if (prediction.predictedDaysUntilEmpty === null || prediction.predictedDaysUntilEmpty === undefined) continue
-
-    if (!best || prediction.predictedDaysUntilEmpty < best.prediction.predictedDaysUntilEmpty) {
-      best = { item, prediction }
-    }
-  }
-
-  return best
-}
 
 const upsertItem = (list, item) => {
   if (!list) return [item]
@@ -69,8 +33,9 @@ export default function Dashboard() {
   const { user } = useAuth()
   const { household, refreshHousehold, leaveHousehold, clearHousehold } = useHousehold()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
-  const [tab, setTab] = useState('inventory')
+  const tab = searchParams.get('tab') || 'inventory'
 
   // null = not fetched yet, so loading state is derived rather than
   // tracked as a separate boolean set synchronously inside an effect.
@@ -93,10 +58,6 @@ export default function Dashboard() {
   const loadLastUsedRef = useRef(() => {})
   const itemsLoading = items === null
   const activityLoading = activity === null
-  const topRestockCandidate = useMemo(
-    () => pickTopRestockCandidate(items, predictions),
-    [items, predictions]
-  )
   const shoppingListLoading = shoppingList === null
   const analyticsLoading = predictions === null && !analyticsError
   const statsLoading = stats === null && !statsError
@@ -198,8 +159,11 @@ export default function Dashboard() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (householdId && tab === 'activity') loadActivity()
-  }, [householdId, tab, loadActivity])
+    if (householdId && tab === 'activity') {
+      loadActivity()
+      loadLastUsed()
+    }
+  }, [householdId, tab, loadActivity, loadLastUsed])
 
   useEffect(() => {
     // Predictions load as soon as a household is open (not gated on the
@@ -223,10 +187,35 @@ export default function Dashboard() {
     loadLastUsedRef.current = loadLastUsed
   }, [loadLastUsed])
 
+  const refreshDerivedData = useCallback(() => {
+    if (!householdId) return
+    loadPredictions()
+    loadStats()
+    if (tab === 'shopping') {
+      loadShoppingList()
+      loadLastUsed()
+    }
+    if (tab === 'activity') {
+      loadActivity()
+      loadLastUsed()
+    }
+  }, [householdId, tab, loadActivity, loadPredictions, loadStats, loadShoppingList, loadLastUsed])
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (householdId && tab === 'shopping' && lastUsedLog === null) loadLastUsed()
   }, [householdId, tab, lastUsedLog, loadLastUsed])
+
+  const mergedActivity = useMemo(() => {
+    const lastUsedEntries = (lastUsedLog || []).map((entry) => ({
+      _id: `last-used:${entry.itemId}:${entry.date}`,
+      message: `${entry.userName} used ${entry.quantityUsed} ${entry.unit} of ${entry.itemName}${entry.ranOut ? ' and finished it off' : ''}`,
+      user: { name: entry.userName },
+      createdAt: entry.date,
+    }))
+
+    return [...lastUsedEntries, ...(activity || [])]
+  }, [activity, lastUsedLog])
 
   useEffect(() => {
     if (!householdId) return
@@ -237,14 +226,17 @@ export default function Dashboard() {
 
     const handleItemAdded = ({ item }) => {
       setItems((prev) => upsertItem(prev, item))
+      refreshDerivedData()
     }
 
     const handleItemUpdated = ({ item }) => {
       setItems((prev) => upsertItem(prev, item))
+      refreshDerivedData()
     }
 
     const handleQuantityUpdated = ({ item, previousQuantity, newQuantity }) => {
       setItems((prev) => upsertItem(prev, item))
+      refreshDerivedData()
       // A consumption event (quantity went down) can change who "used
       // the last of it" — refresh that log if it's already loaded so it
       // doesn't go stale while the tab sits open.
@@ -259,6 +251,7 @@ export default function Dashboard() {
 
     const handleItemRemoved = ({ itemId }) => {
       setItems((prev) => (prev || []).filter((item) => item._id !== itemId))
+      refreshDerivedData()
     }
 
     const handleActivityNew = ({ activity: entry }) => {
@@ -266,6 +259,15 @@ export default function Dashboard() {
         if (prev === null || prev.some((activity) => activity._id === entry._id)) return prev
         return [entry, ...prev]
       })
+
+      if (
+        entry?.action === 'quantity_updated' &&
+        typeof entry?.previousQuantity === 'number' &&
+        typeof entry?.newQuantity === 'number' &&
+        entry.newQuantity < entry.previousQuantity
+      ) {
+        loadLastUsedRef.current()
+      }
     }
 
     const handleShoppingItemAdded = ({ item }) => {
@@ -357,7 +359,7 @@ export default function Dashboard() {
       socket.off('item:editing_stopped', handleEditingStopped)
       socket.off('presence:offline', handlePresenceOffline)
     }
-  }, [householdId])
+  }, [householdId, refreshDerivedData])
 
   const handleAddItem = async (payload) => {
     const { data } = await api.post(`/households/${household._id}/items`, payload)
@@ -424,8 +426,9 @@ export default function Dashboard() {
     <div className="page">
       <div className="page-header">
         <div>
-          <div className="eyebrow">Household</div>
+          <div className="eyebrow">Household overview</div>
           <h1>{household.name}</h1>
+          <p className="page-subtitle">Keep your shared stock, shopping, and household activity in sync.</p>
         </div>
         <button type="button" className="btn btn-outline btn-sm" onClick={clearHousehold}>
           Switch household
@@ -438,33 +441,6 @@ export default function Dashboard() {
         dismissedIds={dismissedAlertIds}
         onDismiss={handleDismissAlert}
       />
-
-      {topRestockCandidate && (
-        <SmartRestockCard
-          key={topRestockCandidate.item._id}
-          itemName={topRestockCandidate.item.name}
-          category={topRestockCandidate.item.category}
-          currentQuantity={topRestockCandidate.item.quantity}
-          unit={topRestockCandidate.item.unit}
-          dailyConsumption={topRestockCandidate.prediction.dailyConsumptionRate}
-          daysUntilEmpty={topRestockCandidate.prediction.predictedDaysUntilEmpty}
-          recommendedQuantity={topRestockCandidate.prediction.suggestedRestockQuantity}
-          onAddToShoppingList={handleAddShoppingItem}
-        />
-      )}
-
-      <div className="tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            className={`tab ${tab === t.key ? 'active' : ''}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {tab === 'inventory' && (
         <>
@@ -514,23 +490,14 @@ export default function Dashboard() {
         />
       )}
 
-      {tab === 'shopping' && (
-        <LastUsedPanel
-          log={lastUsedLog || []}
-          loading={lastUsedLoading}
-          error={lastUsedError}
-          onRetry={loadLastUsed}
-        />
-      )}
-
       {tab === 'analytics' && (
         <AnalyticsPanel
           items={items || []}
           predictions={predictions || []}
           loading={analyticsLoading}
+          refreshing={analyticsRefreshing}
           error={analyticsError}
           onRefresh={loadPredictions}
-          refreshing={analyticsRefreshing}
         />
       )}
 
@@ -538,23 +505,33 @@ export default function Dashboard() {
         <HouseholdStatsPanel
           stats={stats}
           loading={statsLoading}
+          refreshing={statsRefreshing}
           error={statsError}
           onRefresh={loadStats}
-          refreshing={statsRefreshing}
         />
       )}
 
-      {tab === 'activity' && <ActivityPanel activity={activity} loading={activityLoading} />}
+      {tab === 'activity' && (
+        <ActivityPanel
+          activity={mergedActivity}
+          loading={activityLoading && lastUsedLoading}
+          onRetry={() => {
+            loadActivity()
+            loadLastUsed()
+          }}
+        />
+      )}
 
       {tab === 'members' && (
         <MembersPanel
           household={household}
-          currentUserId={user?.id}
           onlineUserIds={onlineUserIds}
           onRemoveMember={handleRemoveMember}
           onLeave={handleLeave}
+          currentUserId={user?.id}
         />
       )}
+
     </div>
   )
 }

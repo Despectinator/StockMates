@@ -23,18 +23,30 @@ best. See `prediction.py` for the full logic and reasoning.
 ```bash
 cd analytics-service
 python3 -m venv venv
-source venv/bin/activate   # venv\Scripts\activate on Windows
+source venv/bin/activate
 pip install -r requirements.txt
 
-cp .env.example .env       # defaults are fine for local dev
+cp .env.example .env
+```
 
-uvicorn app:app --reload --port 8001
+On Windows PowerShell:
+
+```powershell
+cd analytics-service
+.\venv\Scripts\Activate.ps1
+python -m uvicorn app:app --host 127.0.0.1 --port 8001
 ```
 
 Then point the Node server at it via `server/.env`:
 
-```
+```env
 ANALYTICS_SERVICE_URL=http://127.0.0.1:8001
+```
+
+The service health endpoint should respond:
+
+```bash
+curl http://127.0.0.1:8001/health
 ```
 
 ## API

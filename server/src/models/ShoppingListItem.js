@@ -79,5 +79,6 @@ const shoppingListItemSchema = new mongoose.Schema(
 
 // Shopping list is almost always queried as "the full list for a household".
 shoppingListItemSchema.index({ household: 1, createdAt: -1 });
+shoppingListItemSchema.index({ household: 1, sourceItem: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("ShoppingListItem", shoppingListItemSchema);
