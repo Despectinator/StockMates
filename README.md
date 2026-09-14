@@ -176,6 +176,16 @@ The project has been validated end-to-end in a local development setup:
 - React client loads on port 5173
 - Auth, household setup, item updates, and shopping recommendations work in the browser
 
+## Screenshots
+
+### Dashboard overview
+
+![StockMates dashboard overview](docs/screenshots/dashboard.png)
+
+### Household statistics
+
+![StockMates household statistics](docs/screenshots/stats.png)
+
 ## Notes
 
 - The recommended local startup command is the project-root script in [start-stockmates.ps1](./start-stockmates.ps1).
