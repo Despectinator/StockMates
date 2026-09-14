@@ -1,13 +1,13 @@
 # StockMates
-
+ 
 A collaborative MERN-based household inventory and shopping management platform with real-time collaboration, analytics, and intelligent inventory prediction.
-
+ 
 StockMates lets roommates and families create or join a shared household, track inventory together, get low/out-of-stock visibility, and coordinate shopping and usage analytics.
-
+ 
 Built as part of the Zynvex Solutions Internship Program, Batch 3.
-
+ 
 ## Status
-
+ 
 | Module | Area | Status |
 |---|---|---|
 | 1 — Foundation & MVP | User registration & JWT login/logout | ✅ Done |
@@ -32,19 +32,18 @@ Built as part of the Zynvex Solutions Internship Program, Batch 3.
 | 4 | Unusual-usage / low-stock alerts banner | ✅ Done |
 | 4 | Household stats dashboard | ✅ Done |
 | 4 | Last-used log / who-used-the-last-of-it panel | ✅ Done |
-
+ 
 Everything above is wired end-to-end: backend routes, sockets, and the corresponding React UI.
-
+ 
 ## Tech Stack
-
+ 
 - **Frontend:** React, React Router, Axios, Socket.IO client
 - **Backend:** Node.js, Express, REST APIs, Socket.IO
 - **Database:** MongoDB, Mongoose
 - **Analytics:** Python, FastAPI (standalone `analytics-service`, called internally by the Node API)
 - **Auth & Security:** JWT, bcrypt, express-rate-limit, household-level role checks
-
 ## Project Structure
-
+ 
 ```
 StockMates/
 ├── client/               # React frontend (Vite)
@@ -64,29 +63,28 @@ StockMates/
 │       └── routes/           # Express routers
 └── analytics-service/    # Standalone FastAPI service (consumption/prediction)
 ```
-
+ 
 ## Getting Started
-
+ 
 ### Prerequisites
 - Node.js 18+
 - MongoDB running locally on `mongodb://127.0.0.1:27017/stockmates`
 - Python 3.10+ for the analytics service
-
 ### 1. Clone and install
-
+ 
 ```bash
 git clone https://github.com/Despectinator/StockMates.git
 cd StockMates
-
+ 
 cd server && npm install
 cd ../client && npm install
 cd ../analytics-service && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 ```
-
+ 
 ### 2. Configure environment variables
-
+ 
 Create `server/.env`:
-
+ 
 ```env
 MONGO_URI=mongodb://127.0.0.1:27017/stockmates
 PORT=5000
@@ -95,56 +93,56 @@ JWT_EXPIRES_IN=30m
 ANALYTICS_SERVICE_URL=http://127.0.0.1:8001
 CLIENT_ORIGIN=http://localhost:5173
 ```
-
+ 
 For the Vite frontend, set:
-
+ 
 ```env
 VITE_API_URL=http://localhost:5000/api
 VITE_SOCKET_URL=http://localhost:5000
 ```
-
+ 
 Create `analytics-service/.env` from `analytics-service/.env.example` (defaults are fine for local dev).
-
+ 
 ### 3. Run MongoDB and the three app layers
-
+ 
 Start MongoDB locally if it is not already running:
-
+ 
 ```powershell
 mongod --dbpath "C:\data\db"
 ```
-
+ 
 Then either run the full stack together from the project root:
-
+ 
 ```powershell
 cd "D:\StockMates"
 powershell -ExecutionPolicy Bypass -File .\start-stockmates.ps1
 ```
-
+ 
 Or run each app manually:
-
+ 
 ```bash
 # terminal 1
 cd server && npm run dev
-
+ 
 # terminal 2
 cd client && npm run dev
-
+ 
 # terminal 3
 cd analytics-service && source venv/bin/activate && uvicorn app:app --host 127.0.0.1 --port 8001
 ```
-
+ 
 On Windows, the same analytics command is:
-
+ 
 ```powershell
 cd analytics-service
 .\venv\Scripts\Activate.ps1
 python -m uvicorn app:app --host 127.0.0.1 --port 8001
 ```
-
+ 
 The frontend runs at `http://localhost:5173`, the API runs at `http://localhost:5000`, and the analytics service is available at `http://127.0.0.1:8001/health`.
-
+ 
 ## API Overview
-
+ 
 | Resource | Endpoints |
 |---|---|
 | Auth | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/profile`, `PATCH /api/auth/profile` |
@@ -154,44 +152,41 @@ The frontend runs at `http://localhost:5173`, the API runs at `http://localhost:
 | Analytics | `GET /api/households/:id/analytics/predictions`, `GET /api/households/:id/analytics/stats` |
 | Activity | `GET /api/households/:id/activity` |
 | Last-used log | `GET /api/households/:id/items/last-used-log` |
-
+ 
 All routes except registration and login require a `Bearer` JWT. Household-scoped routes additionally require membership (or ownership, for owner-only actions like removing a member or deleting the household).
-
+ 
 Real-time events (Socket.IO, namespaced by `household:<id>` rooms): `inventory:item_added`, `inventory:item_updated`, `inventory:quantity_updated`, `inventory:item_removed`, `activity:new`, `shopping:item_added`, `shopping:item_claimed`, `shopping:item_unclaimed`, `shopping:item_removed`, `presence:list`, `presence:online`, `presence:offline`.
-
+ 
 ## Rate Limiting
-
+ 
 Authentication routes are protected with `express-rate-limit` to prevent repeated brute-force attempts.
-
+ 
 - `POST /api/auth/register` and `POST /api/auth/login`: 20 requests per 15 minutes per IP
 - 429 response body: `{ "message": "Too many attempts. Please try again in a few minutes." }`
-
 ## Verified Local Workflow
-
+ 
 The project has been validated end-to-end in a local development setup:
-
+ 
 - MongoDB starts and connects correctly
 - Node backend starts on port 5000
 - Python analytics service starts on port 8001
 - React client loads on port 5173
 - Auth, household setup, item updates, and shopping recommendations work in the browser
-
 ## Screenshots
-
+ 
 ### Dashboard overview
-
+ 
 ![StockMates dashboard overview](./docs/screenshots/dashboard.png)
-
+ 
 ### Household statistics
-
+ 
 ![StockMates household statistics](./docs/screenshots/household.jpeg)
-
+ 
 ## Notes
-
+ 
 - The recommended local startup command is the project-root script in [start-stockmates.ps1](./start-stockmates.ps1).
 - If a stale port conflict appears, stop the old listeners and rerun the script.
 - The current app is intended for local development and validation. Production deployment and hardened hosting configuration are still separate follow-up work.
-
 ## License
-
+ 
 MIT — see [LICENSE](./LICENSE).
