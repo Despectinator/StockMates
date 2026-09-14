@@ -180,11 +180,11 @@ The project has been validated end-to-end in a local development setup:
 
 ### Dashboard overview
 
-![StockMates dashboard overview](docs/screenshots/dashboard.png)
+![StockMates dashboard overview](C:\Users\Ali\Downloads\dashboard.png)
 
 ### Household statistics
 
-![StockMates household statistics](docs/screenshots/stats.png)
+![StockMates household statistics](C:\Users\Ali\Downloads\household.jpeg)
 
 ## Notes
 
