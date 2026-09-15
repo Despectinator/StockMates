@@ -17,7 +17,18 @@ const { setupHouseholdSocket } = require("./socket/householdSocket");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const allowedOrigins = (process.env.CLIENT_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOrigin = (origin, callback) => {
+  if (!origin || allowedOrigins.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(new Error("Not allowed by CORS"));
+};
 
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET === "replace_with_a_long_random_string") {
   throw new Error("JWT_SECRET must be set and non-default for local or production use.");
@@ -27,13 +38,15 @@ if (!process.env.MONGO_URI || process.env.MONGO_URI.trim() === "") {
   throw new Error("MONGO_URI must be set before the server starts.");
 }
 
+app.set("trust proxy", 1);
+
 // Create HTTP server
 const server = http.createServer(app);
 
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_ORIGIN,
+    origin: corsOrigin,
     credentials: true,
   },
 });
@@ -47,7 +60,7 @@ io.use(socketAuthMiddleware);
 setupHouseholdSocket(io);
 
 app.use(cors({
-  origin: CLIENT_ORIGIN,
+  origin: corsOrigin,
   credentials: true,
 }));
 
@@ -62,8 +75,14 @@ app.get("/", (req, res) => {
   });
 });
 
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+  });
+});
+
 connectDB();
 
-server.listen(PORT, () => {
-  console.log(`StockMates server running on http://localhost:${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`StockMates server running on port ${PORT}`);
 });
