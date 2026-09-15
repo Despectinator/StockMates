@@ -174,13 +174,18 @@ The project has been validated end-to-end in a local development setup:
 - Auth, household setup, item updates, and shopping recommendations work in the browser
 ## Screenshots
 
-### Dashboard Overview
+### Login Panel
 
 ![StockMates dashboard overview](./docs/screenshots/dashboard.png)
 
+### Dashboard overview
+
+<img width="1887" height="837" alt="dashboard" src="https://github.com/user-attachments/assets/c0f5a9b7-e1b5-4b36-a858-7fef0a80876b" />
+
 ### Household Statistics
 
-![StockMates household statistics](./docs/screenshots/household.jpeg)
+![StockMates household statistics]<img width="1596" height="3628" alt="HOUSEHOLD" src="https://github.com/user-attachments/assets/15fee54c-16d9-48ea-bac7-2927bc1160e1" />
+
  
 ## Notes
  
