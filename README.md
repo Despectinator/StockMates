@@ -184,7 +184,7 @@ The project has been validated end-to-end in a local development setup:
 
 ### Household Statistics
 
-![StockMates household statistics]<img width="1596" height="3628" alt="HOUSEHOLD" src="https://github.com/user-attachments/assets/15fee54c-16d9-48ea-bac7-2927bc1160e1" />
+<img width="1596" height="3628" alt="HOUSEHOLD" src="https://github.com/user-attachments/assets/15fee54c-16d9-48ea-bac7-2927bc1160e1" />
 
  
 ## Notes
